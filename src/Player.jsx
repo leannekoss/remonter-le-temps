@@ -27,6 +27,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   const sobre = useMemo(reduceMotion, [])
   const [playing, setPlaying] = useState(!sobre)
   const [index, setIndex] = useState(0)
+  const [video, setVideo] = useState(null)
 
   const total = epochs.length
   const fade = sobre ? 0 : FADE
@@ -157,44 +158,50 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     if (e.key === ' ') { e.preventDefault(); setPlaying((p) => !p) }
   }
 
-  // Enregistre un tour complet puis propose le partage natif ; a defaut, telecharge.
-  const exporter = async () => {
+  // On enregistre un tour complet UNE fois, puis on laisse le choix : telecharger ou
+  // partager. Declencher le partage direct ferait perdre le fichier a qui annule la
+  // feuille native, et priverait le bureau du telechargement.
+  const exporter = () => {
     const canvas = canvasRef.current
     if (!canvas?.captureStream) return
     const type = pickMime()
     if (!type) return
+    if (video) URL.revokeObjectURL(video.url)
+    setVideo(null)
     onRecordingChange?.(true)
     const chunks = []
     const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: type })
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
-    rec.onstop = async () => {
+    rec.onstop = () => {
       const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm'
       const blob = new Blob(chunks, { type })
-      const file = new File([blob], `remonter-le-temps.${ext}`, { type })
+      const nom = `remonter-le-temps.${ext}`
+      setVideo({
+        url: URL.createObjectURL(blob),
+        nom,
+        ext,
+        poids: Math.round(blob.size / 1048576 * 10) / 10,
+        file: new File([blob], nom, { type }),
+      })
       onRecordingChange?.(false)
-      if (navigator.canShare?.({ files: [file] })) {
-        try {
-          await navigator.share({ files: [file], title: 'Remonter le temps' })
-          return
-        } catch { /* partage annule : on retombe sur le telechargement */ }
-      }
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = file.name
-      a.click()
-      URL.revokeObjectURL(url)
     }
     setPlaying(true)
     rec.start()
     setTimeout(() => rec.stop(), total * cycle + 200)
   }
 
+  const partagerVideo = async () => {
+    if (!video || !navigator.canShare?.({ files: [video.file] })) return
+    try {
+      await navigator.share({ files: [video.file], title: 'Remonter le temps' })
+    } catch { /* partage annule : le lien de telechargement reste la */ }
+  }
+
   if (total === 0) return null
   const annee = epochs[index]?.label ?? ''
 
   return (
-    <figure className="m-0">
+    <figure className="m-0 min-w-0">
       <div className="relative overflow-hidden rounded-lg bg-black">
         <canvas
           ref={canvasRef}
@@ -206,7 +213,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
           onKeyDown={onKeyDown}
-          className="block w-full cursor-grab touch-none outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[var(--color-vermillon)]"
+          className="block w-full max-w-full cursor-grab touch-none outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[var(--color-vermillon)]"
         />
 
         {/* L'annee est la charge emotionnelle : c'est le seul element qui a le droit
@@ -254,9 +261,32 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           onClick={exporter}
           className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
         >
-          Video
+          Creer la video
         </button>
       </div>
+
+      {video && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-filet)] p-3">
+          <a
+            href={video.url}
+            download={video.nom}
+            className="tap grid h-11 place-items-center rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
+          >
+            Telecharger la video
+          </a>
+          {navigator.canShare?.({ files: [video.file] }) && (
+            <button
+              onClick={partagerVideo}
+              className="tap h-11 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
+            >
+              Envoyer a quelqu'un
+            </button>
+          )}
+          <span className="text-xs text-[var(--color-attenue)]">
+            {video.ext.toUpperCase()}, {video.poids} Mo
+          </span>
+        </div>
+      )}
 
       {/* La frise nommee est confortable a la souris, mais elle ferait seize cibles
           minuscules sur telephone : la reglette ci-dessus y suffit. */}

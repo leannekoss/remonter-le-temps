@@ -243,7 +243,7 @@ export default function App() {
       )}
 
       {data && view && (
-        <section className="flex flex-col gap-4">
+        <section className="flex min-w-0 flex-col gap-4">
           <Player
             epochs={data.epochs}
             buffer={data.buffer}
