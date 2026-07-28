@@ -39,8 +39,18 @@ export function parseCoords(text) {
   return { lat, lon }
 }
 
-// Un lieu-dit ou une commune renvoient un point approximatif : on le dit a l'utilisateur
-// au lieu de laisser croire qu'on a trouve sa maison.
+// Un lieu-dit ou une commune renvoient un point approximatif : on le dit à l'utilisateur
+// au lieu de laisser croire qu'on a trouvé sa maison.
 export function isApproximate(place) {
   return place.type === 'municipality' || place.type === 'locality' || place.score < 0.6
+}
+
+// Le cadrage doit suivre la précision du résultat. Taper « Hanvec 29 » renvoie le centre
+// de la commune : l'afficher sur 300 m ne montre que quelques toits anonymes, et le site
+// paraît cassé. Retour d'un premier testeur le 28/07, sur trois communes d'affilée.
+export function widthForType(type) {
+  if (type === 'municipality') return 2000   // on veut voir le bourg entier
+  if (type === 'locality') return 800        // hameau, lieu-dit
+  if (type === 'street') return 500          // la rue et ce qui l'entoure
+  return 300                                 // une adresse avec numéro : la parcelle
 }

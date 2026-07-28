@@ -152,6 +152,9 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     if (pointersRef.current.size < 2) pinchRef.current = null
   }
 
+  const zoomCentre = (facteur) =>
+    onViewChange(zoomAt(viewRef.current, facteur, CANVAS_W, canvasH, CANVAS_W / 2, canvasH / 2))
+
   const onKeyDown = (e) => {
     const pas = { ArrowLeft: -1, ArrowRight: 1 }[e.key]
     if (pas) { e.preventDefault(); setPlaying(false); goTo(indexRef.current + pas) }
@@ -216,8 +219,31 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           className="block w-full max-w-full cursor-grab touch-none outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[var(--color-vermillon)]"
         />
 
-        {/* L'annee est la charge emotionnelle : c'est le seul element qui a le droit
-            d'etre grand. Voile en degrade pour rester lisible sur un toit clair. */}
+        {/* Le zoom existait déjà (molette, pincement) mais rien ne le montrait : le
+            premier testeur a demandé la fonction alors qu'elle était là. Deux boutons
+            sur l'image, là où l'oeil est - et une alternative cliquable au pincement,
+            que tout le monde ne peut pas faire. */}
+        <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+          <button
+            type="button"
+            onClick={() => zoomCentre(1 / 1.6)}
+            aria-label="Zoomer"
+            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+          >
+            +
+          </button>
+          <button
+            type="button"
+            onClick={() => zoomCentre(1.6)}
+            aria-label="Dézoomer"
+            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+          >
+            −
+          </button>
+        </div>
+
+        {/* L'année est la charge émotionnelle : c'est le seul élément qui a le droit
+            d'être grand. Voile en dégradé pour rester lisible sur un toit clair. */}
         <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent pt-16 pb-4 pl-4 pr-4">
           <div className="flex items-end justify-between gap-3">
             <span className="text-[clamp(2.25rem,9vw,3.75rem)] leading-[0.85] font-semibold tabular-nums tracking-[-0.02em]">

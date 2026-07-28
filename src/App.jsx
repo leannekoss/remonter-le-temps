@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Player from './Player.jsx'
 import Chargement from './Chargement.jsx'
 import { loadAllEpochs } from './lib/ign.js'
-import { suggest, reverse, parseCoords, isApproximate } from './lib/geocode.js'
+import { suggest, reverse, parseCoords, isApproximate, widthForType } from './lib/geocode.js'
 import { bufferFor, needsRefetch, clampWidth } from './lib/view.js'
 
 const WIDTHS = [150, 300, 800, 2000]
@@ -136,7 +136,7 @@ export default function App() {
   const goTo = (next, widthM) => {
     dejaDefile.current = false
     setPlace(next)
-    setView({ lat: next.lat, lon: next.lon, widthM: widthM ?? view?.widthM ?? 300 })
+    setView({ lat: next.lat, lon: next.lon, widthM: widthM ?? widthForType(next.type) })
   }
 
   const submit = async (e) => {
@@ -344,13 +344,14 @@ export default function App() {
           )}
 
           <p className="text-sm text-[var(--color-attenue)]">
-            Faites glisser l'image pour vous déplacer, pincez ou utilisez la molette pour zoomer.
+            Faites glisser l'image pour vous déplacer. Les boutons + et − changent l'échelle, comme la molette et le pincement.
           </p>
 
           {place && isApproximate(place) && (
             <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
-              Ce point est approximatif : sans numéro de rue, on tombe sur le centre de la
-              commune. Faites glisser l'image jusqu'à votre maison.
+              {place.type === 'municipality'
+                ? "Vous avez cherché une commune : la vue est centrée sur le bourg. Zoomez et faites glisser l'image pour trouver l'endroit qui vous intéresse."
+                : "Ce point est approximatif : sans numéro de rue, on tombe à côté. Zoomez et faites glisser l'image jusqu'à votre maison."}
             </p>
           )}
 
