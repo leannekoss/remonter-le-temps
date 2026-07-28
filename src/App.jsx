@@ -301,6 +301,17 @@ export default function App() {
       )}
 
       <footer className="mt-auto border-t border-[var(--color-filet)] pt-5 text-xs leading-relaxed text-[var(--color-attenue)]">
+        <p className="mb-3 text-sm text-[var(--color-craie)]">
+          Fait avec amour par{' '}
+          <a
+            href="https://www.linkedin.com/in/henricasalis/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tap inline-block underline decoration-[var(--color-vermillon)] decoration-2 underline-offset-4 transition-colors hover:text-[var(--color-vermillon)]"
+          >
+            Henri Casalis
+          </a>
+        </p>
         <p>
           Photographies aériennes, carte d'état-major et carte de Cassini : Institut national
           de l'information géographique et forestière (IGN), via data.geopf.fr, sous Licence
