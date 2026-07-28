@@ -93,10 +93,12 @@ export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
 // Charge tous les millesimes en parallele. Le navigateur limite lui-meme le nombre
 // de connexions simultanees : c'est ce qui fait passer le rendu de plusieurs minutes
 // (script sequentiel) a quelques secondes.
-export async function loadAllEpochs(lat, lon, widthM, onProgress) {
+//
+// buffer = { lat, lon, widthM, pxW, pxH } : l'emprise reellement telechargee, plus
+// large que ce qui sera affiche, pour que zoom et deplacement restent hors reseau.
+export async function loadAllEpochs(buffer, onProgress) {
+  const { lat, lon, widthM, pxW, pxH } = buffer
   const bbox = bboxAround(lat, lon, widthM)
-  const pxW = 1200
-  const pxH = Math.round((pxW * 2) / 3)
   let done = 0
   const results = await Promise.all(
     LAYERS.map(async ([layer, fmt, year, label]) => {

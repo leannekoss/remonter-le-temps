@@ -42,10 +42,22 @@ npm install
 npm run dev
 ```
 
+## Navigation libre
+
+On telecharge un tampon deux fois plus large que la vue affichee, a 2400 px (1800 sur
+petit ecran), puis on recadre dedans avec un `drawImage` a rectangle source. Tant que le
+geste reste dans le tampon, **aucune requete reseau**. Un rechargement ne part que si la
+vue sort du tampon ou reclame plus de 1,5 fois sa definition, et seulement 400 ms apres
+la fin du geste.
+
+Mesure au navigateur : molette et glisse dans le tampon = **0 requete** ; sortie du
+tampon = **17 requetes**, une seule salve, sans boucle.
+
+C'est aussi ce qui rattrape les lieux-dits mal geocodes : l'utilisateur deplace la vue
+jusqu'a sa maison, ce qu'aucun geocodeur ne sait faire.
+
 ## Reste a faire
 
-- Ajustement visuel du cadre a la souris avant de lancer (le vrai filet de securite
-  pour les lieux-dits)
 - Export MP4 plutot que WebM (ffmpeg.wasm, environ 3 Mo de plus a charger)
 - Galerie publique des lieux, en opt-in explicite et arrondie a la commune
   (question de vie privee : les gens cherchent leur maison)
