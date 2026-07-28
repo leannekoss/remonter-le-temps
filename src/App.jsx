@@ -398,12 +398,6 @@ export default function App() {
             </span>
           </div>
 
-          {recording && (
-            <p role="status" className="text-sm text-[var(--color-vermillon)]">
-              Enregistrement en cours, laissez l'animation aller au bout.
-            </p>
-          )}
-
           <p className="text-sm text-[var(--color-attenue)]">
             Faites glisser l'image pour vous déplacer. Les boutons + et − changent l'échelle, comme la molette et le pincement.
           </p>

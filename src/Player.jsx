@@ -28,6 +28,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
   const [playing, setPlaying] = useState(!sobre)
   const [index, setIndex] = useState(0)
   const [video, setVideo] = useState(null)
+  const [enreg, setEnreg] = useState(null)   // { debut, duree } pendant la capture
+  const [tick, setTick] = useState(0)
 
   const total = epochs.length
   const fade = sobre ? 0 : FADE
@@ -46,6 +48,15 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
     indexRef.current = 0
     setIndex(0)
   }, [cle])
+
+  // L'enregistrement dure exactement total * cycle : la barre est donc determinee,
+  // pas une animation decorative. On rafraichit 10 fois par seconde, ce qui suffit a
+  // l'oeil sans reconstruire l'animation du canvas.
+  useEffect(() => {
+    if (!enreg) return
+    const id = setInterval(() => setTick((t) => t + 1), 100)
+    return () => clearInterval(id)
+  }, [enreg])
 
   const goTo = (i) => {
     const clamped = Math.max(0, Math.min(total - 1, i))
@@ -173,6 +184,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
     if (!type) return
     if (video) URL.revokeObjectURL(video.url)
     setVideo(null)
+    const duree = total * cycle + 200
+    setEnreg({ debut: performance.now(), duree })
     onRecordingChange?.(true)
     const chunks = []
     const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: type })
@@ -188,11 +201,12 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
         poids: Math.round(blob.size / 1048576 * 10) / 10,
         file: new File([blob], nom, { type }),
       })
+      setEnreg(null)
       onRecordingChange?.(false)
     }
     setPlaying(true)
     rec.start()
-    setTimeout(() => rec.stop(), total * cycle + 200)
+    setTimeout(() => rec.stop(), duree)
   }
 
   const partagerVideo = async () => {
@@ -201,6 +215,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
       await navigator.share({ files: [video.file], title: 'Remonter le temps' })
     } catch { /* partage annule : le lien de telechargement reste la */ }
   }
+
+  void tick   // dépendance de rendu : c'est la minuterie qui fait avancer la barre
 
   if (total === 0) return null
   const annee = epochs[index]?.label ?? ''
@@ -305,6 +321,37 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
           </span>
         )}
       </div>
+
+      {enreg && (() => {
+        const part = Math.min(1, (performance.now() - enreg.debut) / enreg.duree)
+        const restant = Math.max(0, Math.ceil((enreg.duree * (1 - part)) / 1000))
+        return (
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-[var(--color-filet)] p-3">
+            <div className="flex items-baseline justify-between gap-3 text-sm">
+              <span>Enregistrement de la vidéo</span>
+              <span className="tabular-nums text-[var(--color-attenue)]">
+                {restant} s
+              </span>
+            </div>
+            <div
+              className="h-1 w-full overflow-hidden rounded-full bg-[var(--color-encre)]"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(part * 100)}
+              aria-label="Enregistrement de la vidéo"
+            >
+              <div
+                className="h-full rounded-full bg-[var(--color-vermillon)]"
+                style={{ width: `${Math.max(2, part * 100)}%` }}
+              />
+            </div>
+            <p className="text-xs text-[var(--color-attenue)]">
+              L'animation doit aller au bout : laissez cet onglet au premier plan.
+            </p>
+          </div>
+        )
+      })()}
 
       {video && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-filet)] p-3">
