@@ -12,7 +12,7 @@ const BUFFER_RATIO = 2      // le tampon couvre 2x la largeur affichee
 const MAX_UPSCALE = 1.5     // au-dela, on regrossit trop le flou -> rechargement
 
 export const MIN_WIDTH_M = 60
-export const MAX_WIDTH_M = 4000
+export const MAX_WIDTH_M = 8000   // assez large pour que Cassini (1:86400) soit lisible
 
 export const clampWidth = (m) => Math.min(MAX_WIDTH_M, Math.max(MIN_WIDTH_M, m))
 
@@ -26,6 +26,7 @@ export function bufferFor(view) {
     lat: view.lat,
     lon: view.lon,
     widthM: view.widthM * BUFFER_RATIO,
+    viewWidthM: view.widthM,   // sert a decider quelles cartes anciennes sont lisibles
     pxW,
     pxH: Math.round((pxW * 2) / 3),
   }

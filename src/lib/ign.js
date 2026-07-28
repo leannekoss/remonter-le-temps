@@ -21,6 +21,18 @@ export const LAYERS = [
   ['ORTHOIMAGERY.ORTHOPHOTOS.RVB-EXPRESS.2026', 'jpeg', 2026, '2026'],
 ]
 
+// Avant la photographie aerienne, il reste les cartes - numerisees et calees par l'IGN,
+// donc meme service, meme licence ouverte que les orthophotos.
+//
+// Elles ont ete dessinees a une echelle donnee : les afficher sur 200 m de large ne
+// montre que du grain. D'ou minWidthM, la largeur de vue en dessous de laquelle on ne
+// les propose pas. Mesure sur la parcelle de reference : l'etat-major (1:40000) est
+// deja lisible vers 700 m, Cassini (1:86400) demande environ 2 km.
+export const HISTORIC = [
+  ['AN-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI', 'jpeg', 1760, 'vers 1760 - Cassini', 2000],
+  ['GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 'jpeg', 1840, 'vers 1840 - etat-major', 700],
+]
+
 // Emprise centree sur le point. Hauteur = 2/3 de la largeur (format paysage).
 // WMS 1.3.0 en EPSG:4326 attend la bbox en lat,lon - pas l'inverse.
 export function bboxAround(lat, lon, widthM) {
@@ -97,11 +109,17 @@ export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
 // buffer = { lat, lon, widthM, pxW, pxH } : l'emprise reellement telechargee, plus
 // large que ce qui sera affiche, pour que zoom et deplacement restent hors reseau.
 export async function loadAllEpochs(buffer, onProgress) {
-  const { lat, lon, widthM, pxW, pxH } = buffer
+  const { lat, lon, widthM, viewWidthM, pxW, pxH } = buffer
   const bbox = bboxAround(lat, lon, widthM)
+
+  const lisibles = HISTORIC.filter(([, , , , minW]) => viewWidthM >= minW)
+  const tropSerrees = HISTORIC.filter(([, , , , minW]) => viewWidthM < minW)
+    .map(([, , , label, minW]) => ({ label, minWidthM: minW }))
+
+  const todo = [...lisibles, ...LAYERS]
   let done = 0
   const results = await Promise.all(
-    LAYERS.map(async ([layer, fmt, year, label]) => {
+    todo.map(async ([layer, fmt, year, label]) => {
       try {
         const epoch = await loadEpoch(layer, fmt, label, bbox, pxW, pxH)
         return epoch ? { ...epoch, year } : null
@@ -109,7 +127,7 @@ export async function loadAllEpochs(buffer, onProgress) {
         // Echouer visible plutot que faire disparaitre une decennie en silence.
         return { year, label, error: true }
       } finally {
-        onProgress?.(++done, LAYERS.length)
+        onProgress?.(++done, todo.length)
       }
     }),
   )
@@ -123,5 +141,5 @@ export async function loadAllEpochs(buffer, onProgress) {
     seen.add(r.hash)
     epochs.push(r)
   }
-  return { epochs, failed }
+  return { epochs, failed, tropSerrees }
 }

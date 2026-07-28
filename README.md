@@ -16,6 +16,24 @@ Mesures du 28/07/2026 :
 - script Python local, sequentiel, avec la couche satellite : **657 s** pour un lieu
 - les memes requetes IGN en parallele : **4,2 s**, environ 1,3 Mo transferes
 
+## Avant la photo aerienne : les cartes
+
+L'IGN a numerise et cale la **carte de Cassini** (vers 1760, avec les Archives nationales)
+et la **carte d'etat-major** (vers 1840). Memes serveur, meme licence ouverte que les
+orthophotos - contrairement a l'imagerie satellite, elles sont librement rediffusables.
+
+Elles ne sont proposees qu'au-dela d'une certaine largeur de vue, parce qu'elles ont ete
+dessinees a une echelle donnee : l'etat-major (1:40000) devient lisible vers 700 m,
+Cassini (1:86400) vers 2 km. En dessous, on ne verrait que le grain du papier. Quand la
+vue est trop serree, le site le dit et invite a dezoomer.
+
+Sur la parcelle de reference : 8 epoques a 300 m de large, **10 a 2 km** - la frise part
+alors de 1760.
+
+Piege verifie : le filtre "dalle blanche" aurait pu rejeter des cartes dessinees,
+majoritairement claires. Mesure faite - le papier ancien tombe a 0 % de pixels
+quasi-blancs, contre 100 % pour une vraie dalle vide. Aucun faux rejet.
+
 ## Ce qui differe du script local
 
 Le script `ign_gps_timelapse.py` ajoute une couche satellite via Esri Wayback

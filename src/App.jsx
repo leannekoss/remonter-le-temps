@@ -4,7 +4,7 @@ import { loadAllEpochs } from './lib/ign.js'
 import { suggest, reverse, parseCoords, isApproximate } from './lib/geocode.js'
 import { bufferFor, needsRefetch, clampWidth } from './lib/view.js'
 
-const WIDTHS = [150, 300, 500, 800]
+const WIDTHS = [150, 300, 800, 2000]
 const CANVAS_W = 1200
 const SETTLE = 400   // ms d'immobilite avant de retelecharger apres un geste
 
@@ -54,7 +54,7 @@ export default function App() {
         if (!keepVisible) setData(null)
         return
       }
-      setData({ epochs: res.epochs, buffer, failed: res.failed })
+      setData({ epochs: res.epochs, buffer, failed: res.failed, tropSerrees: res.tropSerrees })
     } catch {
       if (run === runRef.current) setError('Le service IGN ne repond pas. Reessayez dans un instant.')
     } finally {
@@ -136,8 +136,8 @@ export default function App() {
       <header className="mb-8">
         <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Remonter le temps</h1>
         <p className="mt-2 max-w-xl text-slate-400">
-          Un lieu en France, vu du ciel, des annees 1950 a aujourd'hui. Les photos viennent
-          de l'IGN, qui survole le pays depuis l'apres-guerre.
+          Un lieu en France a travers le temps : les photos aeriennes de l'IGN depuis 1950,
+          et en dezoomant, la carte d'etat-major du XIXe siecle puis celle de Cassini.
         </p>
       </header>
 
@@ -228,6 +228,17 @@ export default function App() {
             Faites glisser pour deplacer, molette ou pincement pour zoomer.
           </p>
 
+          {data.tropSerrees?.length > 0 && (
+            <p className="rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-3 text-sm text-slate-300">
+              Avant la photo aerienne, il y a les cartes. Dezoomez pour les faire apparaitre :
+              {' '}
+              {data.tropSerrees
+                .map((m) => `${m.label} a partir de ${m.minWidthM} m`)
+                .join(', ')}
+              . Elles ont ete dessinees a une echelle donnee, plus pres on ne verrait que le grain du papier.
+            </p>
+          )}
+
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <button
               onClick={share}
@@ -252,8 +263,9 @@ export default function App() {
 
       <footer className="mt-14 border-t border-[var(--color-line)] pt-6 text-xs leading-relaxed text-slate-500">
         <p>
-          Photos aeriennes : IGN - Geoplateforme (data.geopf.fr), sous Licence Ouverte Etalab 2.0.
-          Recherche d'adresse : Base Adresse Nationale.
+          Photos aeriennes, carte d'etat-major et carte de Cassini : IGN - Geoplateforme
+          (data.geopf.fr), sous Licence Ouverte Etalab 2.0. Cassini numerisee avec les
+          Archives nationales. Recherche d'adresse : Base Adresse Nationale.
         </p>
         <p className="mt-2">
           L'IGN photographie la France par rotation, tous les departements ne sont pas survoles
