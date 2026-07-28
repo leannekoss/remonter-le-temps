@@ -6,6 +6,16 @@ import { suggest, reverse, parseCoords, isApproximate } from './lib/geocode.js'
 import { bufferFor, needsRefetch, clampWidth } from './lib/view.js'
 
 const WIDTHS = [150, 300, 800, 2000]
+
+// Quatre lieux ou le changement saute aux yeux : c'est la demonstration la plus courte
+// du produit, un clic au lieu d'une explication. Coordonnees verifiees au geocodage
+// inverse, cadrage verifie a l'image.
+const EXEMPLES = [
+  { label: 'Le viaduc de Millau', lat: 44.0794, lon: 3.0225, widthM: 2000, quoi: "il n'existait pas avant 2004" },
+  { label: 'La Défense', lat: 48.8926, lon: 2.2358, widthM: 800, quoi: 'des usines, puis des tours' },
+  { label: "L'aéroport de Roissy", lat: 49.0097, lon: 2.5479, widthM: 2000, quoi: "des champs jusqu'en 1974" },
+  { label: 'Le Mont-Saint-Michel', lat: 48.6361, lon: -1.5115, widthM: 800, quoi: 'la digue a disparu' },
+]
 const CANVAS_W = 1200
 const SETTLE = 400   // ms d'immobilite avant de retelecharger apres un geste
 
@@ -31,6 +41,8 @@ export default function App() {
   const [shared, setShared] = useState(false)
   const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth))
   const bootRef = useRef(false)
+  const vueRef = useRef(null)
+  const dejaDefile = useRef(false)
   const runRef = useRef(0)
 
   // La rotation du téléphone change le format de la vue, donc le tampon a retelecharger.
@@ -112,7 +124,17 @@ export default function App() {
     }
   }, [])
 
+  // Sur telephone, le resultat apparait sous le champ et le clavier : sans ce
+  // defilement, on croit qu'il ne s'est rien passe.
+  useEffect(() => {
+    if (!data || dejaDefile.current || !vueRef.current) return
+    dejaDefile.current = true
+    const sobre = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    vueRef.current.scrollIntoView({ behavior: sobre ? 'auto' : 'smooth', block: 'start' })
+  }, [data])
+
   const goTo = (next, widthM) => {
+    dejaDefile.current = false
     setPlace(next)
     setView({ lat: next.lat, lon: next.lon, widthM: widthM ?? view?.widthM ?? 300 })
   }
@@ -125,7 +147,16 @@ export default function App() {
       setTyping(false)
       return goTo({ ...coords, label, type: 'housenumber', score: 1 })
     }
-    if (options[0]) { setTyping(false); setQuery(options[0].label); setOptions([]); goTo(options[0]) }
+    if (options[0]) {
+      setTyping(false); setQuery(options[0].label); setOptions([]); return goTo(options[0])
+    }
+    // L'utilisateur peut valider avant que les suggestions soient revenues : on cherche
+    // alors nous-memes, plutot que de ne rien faire - c'est la que le parcours cassait.
+    if (query.trim().length >= 3) {
+      const res = await suggest(query).catch(() => [])
+      if (res[0]) { setTyping(false); setQuery(res[0].label); setOptions([]); return goTo(res[0]) }
+      setError("Adresse introuvable. Essayez avec la commune, ou collez des coordonnées.")
+    }
   }
 
   const locate = () => {
@@ -143,7 +174,7 @@ export default function App() {
   }
 
   // Une seule action de partage : la feuille native du téléphone quand elle existe,
-  // la copié du lien sinon.
+  // la copie du lien sinon.
   const partager = async () => {
     const payload = {
       title: 'Remonter le temps',
@@ -213,6 +244,16 @@ export default function App() {
           </button>
         </div>
 
+        <button
+          type="submit"
+          className="tap h-12 w-full rounded-lg bg-[var(--color-vermillon)] text-[15px] font-medium text-[var(--color-encre)] transition-opacity hover:opacity-90 sm:w-auto sm:px-8 sm:self-start"
+        >
+          Voir ce lieu
+        </button>
+
+        {/* Les largeurs ne pilotent rien tant qu'aucun lieu n'est choisi : les montrer
+            avant, c'est offrir un bouton mort. */}
+        {view && (
         <div className="flex flex-wrap items-center gap-1">
           {WIDTHS.map((w) => (
             <button
@@ -230,7 +271,31 @@ export default function App() {
             </button>
           ))}
         </div>
+        )}
       </form>
+
+      {!view && !progress && (
+        <section className="flex flex-col gap-3">
+          <p className="text-sm text-[var(--color-attenue)]">
+            Tapez une adresse et l'animation se lance toute seule. Ou commencez par un
+            lieu qui a beaucoup changé :
+          </p>
+          <ul className="flex flex-col gap-1">
+            {EXEMPLES.map((ex) => (
+              <li key={ex.label}>
+                <button
+                  type="button"
+                  onClick={() => { setTyping(false); setQuery(ex.label); goTo(ex, ex.widthM) }}
+                  className="tap flex w-full items-baseline gap-2 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-[var(--color-surface)]"
+                >
+                  <span className="font-medium text-[var(--color-craie)]">{ex.label}</span>
+                  <span className="text-sm text-[var(--color-attenue)]">{ex.quoi}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {progress && (
         <Chargement
@@ -249,7 +314,7 @@ export default function App() {
       )}
 
       {data && view && (
-        <section className="flex min-w-0 flex-col gap-4">
+        <section ref={vueRef} className="flex min-w-0 scroll-mt-4 flex-col gap-4">
           <Player
             epochs={data.epochs}
             buffer={data.buffer}
