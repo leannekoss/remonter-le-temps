@@ -39,6 +39,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [recording, setRecording] = useState(false)
   const [shared, setShared] = useState(false)
+  const [localisation, setLocalisation] = useState(null)   // null | 'en cours' | précision en m
   const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth))
   const bootRef = useRef(false)
   const vueRef = useRef(null)
@@ -187,14 +188,30 @@ export default function App() {
 
   const locate = () => {
     if (!navigator.geolocation) return setError("Votre navigateur ne sait pas se localiser.")
+    setLocalisation('en cours')
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         const label = (await reverse(coords.latitude, coords.longitude)) ?? 'Ma position'
         setTyping(false)
         setQuery(label)
-        goTo({ lat: coords.latitude, lon: coords.longitude, label, type: 'housenumber', score: 1 })
+        setLocalisation(Math.round(coords.accuracy))
+        // Le cadrage suit la précision réelle du relevé. Au GPS d'un téléphone on est
+        // à quelques mètres et 300 m se justifient ; sur un ordinateur la position
+        // vient du wifi ou de l'adresse IP et peut être fausse de plusieurs kilomètres,
+        // auquel cas un cadrage serré montrerait le quartier d'à côté avec aplomb.
+        const p = coords.accuracy
+        const largeur = p <= 20 ? 300 : p <= 100 ? 500 : p <= 1000 ? 2000 : 4000
+        goTo(
+          { lat: coords.latitude, lon: coords.longitude, label, type: 'housenumber', score: 1 },
+          largeur,
+        )
       },
-      () => setError("Localisation refusée. Tapez plutôt une adresse."),
+      (err) => {
+        setLocalisation(null)
+        setError(err.code === err.PERMISSION_DENIED
+          ? "Localisation refusée. Tapez plutôt une adresse."
+          : "Position introuvable pour le moment. Tapez plutôt une adresse.")
+      },
       { enableHighAccuracy: true, timeout: 10000 },
     )
   }
@@ -303,8 +320,24 @@ export default function App() {
       {!view && !progress && (
         <section className="flex flex-col gap-3">
           <p className="text-sm text-[var(--color-attenue)]">
-            Tapez une adresse et l'animation se lance toute seule. Ou commencez par un
-            lieu qui a beaucoup changé :
+            Tapez une adresse et l'animation se lance toute seule.
+          </p>
+
+          <button
+            type="button"
+            onClick={locate}
+            className="tap flex h-12 w-full items-center justify-center gap-2 rounded-lg border border-[var(--color-filet)] text-[15px] transition-colors hover:border-[var(--color-vermillon)] sm:w-auto sm:px-6 sm:self-start"
+          >
+            <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="3.2" stroke="currentColor" strokeWidth="1.6"/>
+              <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6" opacity=".45"/>
+              <path d="M10 .8v2.4M10 16.8v2.4M.8 10h2.4M16.8 10h2.4" stroke="currentColor" strokeWidth="1.6"/>
+            </svg>
+            {localisation === 'en cours' ? 'Localisation...' : 'Utiliser ma position'}
+          </button>
+
+          <p className="text-sm text-[var(--color-attenue)]">
+            Ou commencez par un lieu qui a beaucoup changé :
           </p>
           <ul className="flex flex-col gap-1">
             {EXEMPLES.map((ex) => (
@@ -374,6 +407,16 @@ export default function App() {
           <p className="text-sm text-[var(--color-attenue)]">
             Faites glisser l'image pour vous déplacer. Les boutons + et − changent l'échelle, comme la molette et le pincement.
           </p>
+
+          {typeof localisation === 'number' && localisation > 100 && (
+            <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
+              Votre appareil situe votre position à environ {localisation >= 1000
+                ? `${(localisation / 1000).toFixed(1)} km`
+                : `${localisation} m`} près - c'est courant sur un ordinateur, qui se
+              repère au wifi plutôt qu'au GPS. La vue est élargie en conséquence :
+              déplacez-la et zoomez pour tomber juste.
+            </p>
+          )}
 
           {place && isApproximate(place) && (
             <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
