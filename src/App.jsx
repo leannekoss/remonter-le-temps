@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Player from './Player.jsx'
+import Chargement from './Chargement.jsx'
 import { loadAllEpochs } from './lib/ign.js'
 import { suggest, reverse, parseCoords, isApproximate } from './lib/geocode.js'
 import { bufferFor, needsRefetch, clampWidth } from './lib/view.js'
@@ -32,7 +33,7 @@ export default function App() {
   const bootRef = useRef(false)
   const runRef = useRef(0)
 
-  // La rotation du telephone change le format de la vue, donc le tampon a retelecharger.
+  // La rotation du téléphone change le format de la vue, donc le tampon a retelecharger.
   useEffect(() => {
     let t
     const onResize = () => { clearTimeout(t); t = setTimeout(() => setVw(window.innerWidth), 250) }
@@ -56,27 +57,28 @@ export default function App() {
     const buffer = bufferFor(target, viewportWidth)
     setError('')
     if (keepVisible) setRefining(true)
-    else setProgress({ done: 0, total: 1 })
+    else setProgress({ done: 0, total: 0, trouvees: 0, dernier: null })
     try {
-      const res = await loadAllEpochs(buffer, (done, total) => {
-        if (run === runRef.current && !keepVisible) setProgress({ done, total })
+      const res = await loadAllEpochs(buffer, (done, total, trouvees, trouve) => {
+        if (run !== runRef.current || keepVisible) return
+        setProgress((p) => ({ done, total, trouvees, dernier: trouve ?? p?.dernier ?? null }))
       })
       if (run !== runRef.current) return          // une demande plus recente a pris la main
       if (res.epochs.length === 0) {
-        setError("Aucune photo aerienne ne couvre ce point. L'IGN couvre la France et ses outre-mer.")
+        setError("Aucune photo aérienne ne couvre ce point. L'IGN couvre la France et ses outre-mer.")
         if (!keepVisible) setData(null)
         return
       }
       setData({ epochs: res.epochs, buffer, failed: res.failed, tropSerrees: res.tropSerrees })
     } catch {
-      if (run === runRef.current) setError("Le service de l'IGN ne repond pas. Reessayez dans un instant.")
+      if (run === runRef.current) setError("Le service de l'IGN ne répond pas. Réessayez dans un instant.")
     } finally {
       if (run === runRef.current) { setProgress(null); setRefining(false) }
     }
   }, [])
 
-  // Un geste ne declenche un telechargement que s'il sort du tampon, reclame plus de
-  // definition, ou si le format d'ecran a change - et seulement la main relachee.
+  // Un geste ne déclenche un telechargement que s'il sort du tampon, reclame plus de
+  // définition, ou si le format d'écran a change - et seulement la main relachee.
   useEffect(() => {
     if (!view) return
     if (!data) { load(view, false, vw); return }
@@ -135,13 +137,13 @@ export default function App() {
         setQuery(label)
         goTo({ lat: coords.latitude, lon: coords.longitude, label, type: 'housenumber', score: 1 })
       },
-      () => setError("Localisation refusee. Tapez plutot une adresse."),
+      () => setError("Localisation refusée. Tapez plutôt une adresse."),
       { enableHighAccuracy: true, timeout: 10000 },
     )
   }
 
-  // Une seule action de partage : la feuille native du telephone quand elle existe,
-  // la copie du lien sinon.
+  // Une seule action de partage : la feuille native du téléphone quand elle existe,
+  // la copié du lien sinon.
   const partager = async () => {
     const payload = {
       title: 'Remonter le temps',
@@ -165,8 +167,8 @@ export default function App() {
           Remonter le temps
         </h1>
         <p className="mt-2 max-w-[60ch] text-[var(--color-attenue)]">
-          Un lieu en France a travers le temps : les photos aeriennes de l'IGN depuis 1950,
-          et en dezoomant, la carte d'etat-major du XIX<sup>e</sup> siecle puis celle de Cassini.
+          Un lieu en France à travers le temps : les photos aériennes de l'IGN depuis 1950,
+          et en dézoomant, la carte d'état-major du XIX<sup>e</sup> siècle puis celle de Cassini.
         </p>
       </header>
 
@@ -177,7 +179,7 @@ export default function App() {
               value={query}
               onChange={(e) => { setTyping(true); setQuery(e.target.value) }}
               placeholder="Une adresse en France"
-              aria-label="Adresse ou coordonnees"
+              aria-label="Adresse ou coordonnées"
               className={champ}
             />
             {options.length > 0 && query !== options[0]?.label && (
@@ -231,9 +233,13 @@ export default function App() {
       </form>
 
       {progress && (
-        <p className="text-sm text-[var(--color-attenue)]" role="status">
-          Chargement des millesimes... {progress.done}/{progress.total}
-        </p>
+        <Chargement
+          done={progress.done}
+          total={progress.total}
+          trouvees={progress.trouvees}
+          dernier={progress.dernier}
+          cartesAnciennes={!!view && view.widthM >= 700}
+        />
       )}
 
       {error && (
@@ -257,10 +263,10 @@ export default function App() {
               onClick={partager}
               className="tap h-11 rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
             >
-              {shared ? 'Lien copie' : 'Partager ce lieu'}
+              {shared ? 'Lien copié' : 'Partager ce lieu'}
             </button>
             <span className="text-sm text-[var(--color-attenue)]">
-              {data.epochs.length} millesimes
+              {data.epochs.length} millésimes
               {data.failed.length > 0 && `, ${data.failed.length} indisponibles`}
               {refining && ' - affinage...'}
             </span>
@@ -273,21 +279,21 @@ export default function App() {
           )}
 
           <p className="text-sm text-[var(--color-attenue)]">
-            Faites glisser l'image pour vous deplacer, pincez ou utilisez la molette pour zoomer.
+            Faites glisser l'image pour vous déplacer, pincez ou utilisez la molette pour zoomer.
           </p>
 
           {place && isApproximate(place) && (
             <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
-              Ce point est approximatif : sans numero de rue, on tombe sur le centre de la
-              commune. Faites glisser l'image jusqu'a votre maison.
+              Ce point est approximatif : sans numéro de rue, on tombe sur le centre de la
+              commune. Faites glisser l'image jusqu'à votre maison.
             </p>
           )}
 
           {data.tropSerrees?.length > 0 && (
             <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
-              Avant la photo aerienne, il y a les cartes. Dezoomez pour les faire apparaitre :{' '}
-              {data.tropSerrees.map((m) => `${m.label} a partir de ${m.minWidthM} m`).join(', ')}.
-              Elles ont ete dessinees a une echelle donnee ; plus pres, on ne verrait que le
+              Avant la photo aérienne, il y a les cartes. Dézoomez pour les faire apparaître :{' '}
+              {data.tropSerrees.map((m) => `${m.label} à partir de ${m.minWidthM} m`).join(', ')}.
+              Elles ont été dessinées à une échelle donnée ; plus près, on ne verrait que le
               grain du papier.
             </p>
           )}
@@ -296,15 +302,15 @@ export default function App() {
 
       <footer className="mt-auto border-t border-[var(--color-filet)] pt-5 text-xs leading-relaxed text-[var(--color-attenue)]">
         <p>
-          Photographies aeriennes, carte d'etat-major et carte de Cassini : Institut national
-          de l'information geographique et forestiere (IGN), via data.geopf.fr, sous Licence
-          Ouverte Etalab 2.0. Cassini numerisee avec les Archives nationales. Donnees mises a
+          Photographies aériennes, carte d'état-major et carte de Cassini : Institut national
+          de l'information géographique et forestière (IGN), via data.geopf.fr, sous Licence
+          Ouverte Etalab 2.0. Cassini numérisée avec les Archives nationales. Données mises à
           jour en 2026. Recherche d'adresse : Base Adresse Nationale.
         </p>
         <p className="mt-2">
-          L'IGN photographie la France par rotation : tous les departements ne sont pas
-          survoles chaque annee, le nombre de millesimes varie donc selon les endroits.
-          Aucune donnee n'est collectee, aucun script tiers n'est charge, tout le traitement
+          L'IGN photographie la France par rotation : tous les départements ne sont pas
+          survolés chaque année, le nombre de millésimes varie donc selon les endroits.
+          Aucune donnée n'est collectée, aucun script tiers n'est chargé, tout le traitement
           se fait dans votre navigateur.
         </p>
       </footer>

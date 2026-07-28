@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* Archivo : grotesque de signaletique, chiffres tabulaires - les annees ne dansent pas
-   d'un millesime a l'autre. Auto-hebergee : la page promet que rien ne sort d'ici,
+/* Archivo : grotesque de signaletique, chiffres tabulaires - les années ne dansent pas
+   d'un millésime a l'autre. Auto-hebergee : la page promet que rien ne sort d'ici,
    charger des polices chez Google rendrait cette promesse fausse. */
 @font-face {
   font-family: 'Archivo';
@@ -24,9 +24,9 @@
     U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
-/* Encre chaude, pas ardoise bleutee : le bleu-gris est la signature de l'app SaaS
-   generique, explicitement ecartee. L'accent vermillon est repris des batiments
-   dessines en rouge sur la carte d'etat-major - il vient de la matiere, pas d'un
+/* Encre chaude, pas ardoise bleutée : le bleu-gris est la signature de l'app SaaS
+   générique, explicitement ecartee. L'accent vermillon est repris des batiments
+   dessines en rouge sur la carte d'état-major - il vient de la matière, pas d'un
    nuancier. Contrastes verifies : texte 17.0:1, attenue 8.6:1, accent 5.5:1. */
 @theme {
   --color-encre: #130f0a;

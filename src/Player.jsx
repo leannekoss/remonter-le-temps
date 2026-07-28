@@ -10,7 +10,7 @@ const reduceMotion = () =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 // Safari sait enregistrer en MP4 depuis la 17, ce que tout le monde sait relire.
-// Ailleurs on retombe sur WebM. On demande le type au navigateur plutot que de le
+// Ailleurs on retombe sur WebM. On demande le type au navigateur plutôt que de le
 // supposer : un MediaRecorder cree avec un type non supporte leve.
 function pickMime() {
   const candidats = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
@@ -34,12 +34,12 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   const cycle = HOLD + fade
   const canvasH = Math.round(CANVAS_W * buffer.aspect)
 
-  // La boucle d'animation lit la vue dans une ref : la mettre dans les dependances
+  // La boucle d'animation lit la vue dans une ref : la mettre dans les dépendances
   // ferait redemarrer l'effet a chaque cran de molette.
   viewRef.current = view
 
-  // Un nouveau lieu peut avoir moins de millesimes que le precedent : sans remise a
-  // zero, la boucle lirait un index qui n'existe plus.
+  // Un nouveau lieu peut avoir moins de millésimes que le précédent : sans remise a
+  // zéro, la boucle lirait un index qui n'existe plus.
   useEffect(() => {
     indexRef.current = 0
     setIndex(0)
@@ -120,7 +120,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   }, [onViewChange, canvasH])
 
   const onPointerDown = (e) => {
-    // Enregistrer le pointeur d'abord : la capture est un confort et peut echouer.
+    // Enregistrer le pointeur d'abord : la capture est un confort et peut échouer.
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     pinchRef.current = null
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* le glisse marche quand meme */ }
@@ -158,7 +158,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     if (e.key === ' ') { e.preventDefault(); setPlaying((p) => !p) }
   }
 
-  // On enregistre un tour complet UNE fois, puis on laisse le choix : telecharger ou
+  // On enregistré un tour complet UNE fois, puis on laisse le choix : télécharger ou
   // partager. Declencher le partage direct ferait perdre le fichier a qui annule la
   // feuille native, et priverait le bureau du telechargement.
   const exporter = () => {
@@ -207,7 +207,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           ref={canvasRef}
           tabIndex={0}
           role="img"
-          aria-label={`Vue aerienne du lieu, millesime ${annee}`}
+          aria-label={`Vue aérienne du lieu, millésime ${annee}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -231,7 +231,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
       </div>
 
       <figcaption className="sr-only">
-        Timelapse des photographies aeriennes de l'IGN pour ce lieu.
+        Les photographies aériennes de l'IGN pour ce lieu, mises bout à bout.
       </figcaption>
 
       <div className="mt-3 flex items-center gap-2">
@@ -253,7 +253,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           max={total - 1}
           value={index}
           onChange={(e) => { setPlaying(false); goTo(Number(e.target.value)) }}
-          aria-label="Choisir le millesime"
+          aria-label="Choisir le millésime"
           className="h-11 flex-1 accent-[var(--color-vermillon)]"
         />
 
@@ -261,7 +261,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           onClick={exporter}
           className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
         >
-          Creer la video
+          Créer la vidéo
         </button>
       </div>
 
@@ -272,14 +272,14 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
             download={video.nom}
             className="tap grid h-11 place-items-center rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
           >
-            Telecharger la video
+            Télécharger la vidéo
           </a>
           {navigator.canShare?.({ files: [video.file] }) && (
             <button
               onClick={partagerVideo}
               className="tap h-11 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
             >
-              Envoyer a quelqu'un
+              Envoyer à quelqu'un
             </button>
           )}
           <span className="text-xs text-[var(--color-attenue)]">

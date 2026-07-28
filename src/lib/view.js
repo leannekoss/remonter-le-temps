@@ -1,15 +1,15 @@
 // Conversion geographie <-> pixels pour la navigation libre.
 //
 // Principe : on telecharge un tampon plus large et plus fin que ce qu'on affiche,
-// puis on recadre dedans. Tant que le geste reste dans le tampon, aucune requete
-// reseau - juste un drawImage avec un rectangle source.
+// puis on recadre dedans. Tant que le geste reste dans le tampon, aucune requête
+// réseau - juste un drawImage avec un rectangle source.
 //
-// vue    = { lat, lon, widthM }        la fenetre affichee
-// tampon = vue + { aspect, pxW, pxH }  ce qui a reellement ete telecharge
+// vue    = { lat, lon, widthM }        la fenêtre affichée
+// tampon = vue + { aspect, pxW, pxH }  ce qui a réellement été telecharge
 //
-// Le format n'est PAS une contrainte de la donnee : l'IGN rend n'importe quelle
-// emprise. C'est un choix de mise en page. Sur telephone tenu droit, une image en
-// 3:2 occupe un quart de l'ecran alors qu'elle EST le produit - d'ou un cadrage
+// Le format n'est PAS une contrainte de la donnée : l'IGN rend n'importe quelle
+// emprise. C'est un choix de mise en page. Sur téléphone tenu droit, une image en
+// 3:2 occupe un quart de l'écran alors qu'elle EST le produit - d'ou un cadrage
 // portrait en 4:5, qui est aussi le format qui passe le mieux en story.
 
 const M_PER_DEG = 111320
@@ -23,13 +23,13 @@ export const clampWidth = (m) => Math.min(MAX_WIDTH_M, Math.max(MIN_WIDTH_M, m))
 
 const mPerDegLon = (lat) => M_PER_DEG * Math.cos((lat * Math.PI) / 180)
 
-// hauteur / largeur de la fenetre affichee
+// hauteur / largeur de la fenêtre affichée
 export function aspectFor(viewportWidth) {
   return viewportWidth < 640 ? 1.25 : 2 / 3
 }
 
-// data.geopf.fr accepte jusqu'a 5000 px de cote (sonde le 28/07), on reste tres en
-// dessous. Sur petit ecran on descend en definition : autant d'octets en moins sur
+// data.geopf.fr accepte jusqu'a 5000 px de côté (sonde le 28/07), on reste très en
+// dessous. Sur petit écran on descend en définition : autant d'octets en moins sur
 // un forfait mobile, pour un rendu identique a l'oeil.
 export function bufferFor(view, viewportWidth) {
   const aspect = aspectFor(viewportWidth)
@@ -61,8 +61,8 @@ export function sourceRect(view, buffer) {
 }
 
 // Trois raisons de retelecharger : on est sorti du tampon, on a zoome au point de
-// reclamer plus de definition qu'il n'en contient, ou l'ecran a change de format
-// (rotation du telephone, passage mobile <-> bureau).
+// reclamer plus de définition qu'il n'en contient, ou l'écran a change de format
+// (rotation du téléphone, passage mobile <-> bureau).
 export function needsRefetch(view, buffer, canvasW, viewportWidth) {
   if (!buffer) return true
   if (Math.abs(buffer.aspect - aspectFor(viewportWidth)) > 0.01) return true
@@ -96,7 +96,7 @@ export function zoomAt(view, factor, canvasW, canvasH, cx, cy) {
   }
 }
 
-// Deplacement : le contenu suit le doigt, donc le centre part en sens inverse.
+// Déplacement : le contenu suit le doigt, donc le centre part en sens inverse.
 export function panBy(view, dxPx, dyPx, canvasW) {
   const mPerPx = view.widthM / canvasW
   return {

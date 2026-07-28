@@ -1,12 +1,12 @@
-// Acces aux orthophotos IGN (Geoplateforme, WMS sans cle, CORS ouvert).
-// Portage navigateur du script local ign_gps_timelapse.py : meme liste de couches,
-// memes filtres (dalle vide au poids, dalle blanche no-data, doublon par hash).
+// Accès aux orthophotos IGN (Géoplateforme, WMS sans clé, CORS ouvert).
+// Portage navigateur du script local ign_gps_timelapse.py : même liste de couches,
+// mêmes filtres (dalle vide au poids, dalle blanche no-data, doublon par hash).
 // La couche satellite Esri/Maxar du script n'est PAS reprise : imagerie non
 // redistribuable. Ici tout est sous Licence Ouverte Etalab (mention IGN obligatoire).
 
 const WMS = 'https://data.geopf.fr/wms-r/wms'
 
-// (couche, format, annee de tri, libelle affiche)
+// (couche, format, année de tri, libelle affiche)
 export const LAYERS = [
   ['ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 'png', 1957, '1950-1965'],
   ['ORTHOIMAGERY.ORTHOPHOTOS.1965-1980', 'png', 1972, '1965-1980'],
@@ -21,20 +21,20 @@ export const LAYERS = [
   ['ORTHOIMAGERY.ORTHOPHOTOS.RVB-EXPRESS.2026', 'jpeg', 2026, '2026'],
 ]
 
-// Avant la photographie aerienne, il reste les cartes - numerisees et calees par l'IGN,
-// donc meme service, meme licence ouverte que les orthophotos.
+// Avant la photographie aérienne, il reste les cartes - numérisées et calées par l'IGN,
+// donc même service, même licence ouverte que les orthophotos.
 //
-// Elles ont ete dessinees a une echelle donnee : les afficher sur 200 m de large ne
+// Elles ont été dessinées a une échelle donnée : les afficher sur 200 m de large ne
 // montre que du grain. D'ou minWidthM, la largeur de vue en dessous de laquelle on ne
-// les propose pas. Mesure sur la parcelle de reference : l'etat-major (1:40000) est
-// deja lisible vers 700 m, Cassini (1:86400) demande environ 2 km.
+// les propose pas. Mesure sur la parcelle de référence : l'état-major (1:40000) est
+// déjà lisible vers 700 m, Cassini (1:86400) demande environ 2 km.
 export const HISTORIC = [
   ['AN-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI', 'jpeg', 1760, 'vers 1760 - Cassini', 2000],
-  ['GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 'jpeg', 1840, 'vers 1840 - etat-major', 700],
+  ['GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 'jpeg', 1840, 'vers 1840 - état-major', 700],
 ]
 
-// Emprise centree sur le point. `aspect` = hauteur / largeur : 2/3 en paysage sur
-// grand ecran, 1.25 en portrait sur telephone.
+// Emprise centrée sur le point. `aspect` = hauteur / largeur : 2/3 en paysage sur
+// grand écran, 1.25 en portrait sur téléphone.
 // WMS 1.3.0 en EPSG:4326 attend la bbox en lat,lon - pas l'inverse.
 export function bboxAround(lat, lon, widthM, aspect = 2 / 3) {
   const heightM = widthM * aspect
@@ -74,8 +74,8 @@ async function digest(blob) {
   return hex(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))
 }
 
-// Une dalle "no-data" est blanche mais pese plus que le seuil de poids : il faut
-// la decoder et regarder les pixels. Constate en reel sur ORTHOPHOTOS2016 en rural.
+// Une dalle "no-data" est blanche mais pèse plus que le seuil de poids : il faut
+// la décoder et regarder les pixels. Constaté en reel sur ORTHOPHOTOS2016 en rural.
 async function isBlank(bitmap) {
   const w = 80
   const h = Math.max(1, Math.round((bitmap.height / bitmap.width) * w))
@@ -90,29 +90,29 @@ async function isBlank(bitmap) {
   return pale / (w * h) > 0.9
 }
 
-// Charge un millesime. Renvoie null quand la couche ne couvre pas le point.
+// Charge un millésime. Renvoie null quand la couche ne couvre pas le point.
 export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
   let blob = await get(url(layer, fmt, bbox, pxW, pxH))
-  // Les campagnes historiques sont en 4 bandes : le JPEG echoue en ServiceException XML.
+  // Les campagnes historiques sont en 4 bandes : le JPEG échoue en ServiceException XML.
   if (blob.type.includes('xml') || blob.type.includes('text')) {
     blob = await get(url(layer, 'png', bbox, pxW, pxH))
   }
-  // Pas de filtre au poids : data.geopf.fr tronque parfois ses reponses sous charge,
-  // et une reponse tronquee est legere - elle passerait alors pour une absence de
-  // couverture, en silence. On decode toujours : un flux coupe fait echouer le decodage,
-  // l'erreur remonte et le millesime est affiche comme indisponible au lieu de
-  // disparaitre. Constate en production le 28/07 sur Cassini et l'etat-major.
+  // Pas de filtre au poids : data.geopf.fr tronque parfois ses réponses sous charge,
+  // et une réponse tronquée est légère - elle passerait alors pour une absence de
+  // couverture, en silence. On decode toujours : un flux coupé fait échouer le décodage,
+  // l'erreur remonte et le millésime est affiche comme indisponible au lieu de
+  // disparaître. Constaté en production le 28/07 sur Cassini et l'état-major.
   const bitmap = await createImageBitmap(blob)
   if (await isBlank(bitmap)) { bitmap.close?.(); return null }
   return { label, bitmap, hash: await digest(blob) }
 }
 
-// Charge tous les millesimes en parallele. Le navigateur limite lui-meme le nombre
-// de connexions simultanees : c'est ce qui fait passer le rendu de plusieurs minutes
-// (script sequentiel) a quelques secondes.
+// Charge tous les millésimes en parallèle. Le navigateur limite lui-même le nombre
+// de connexions simultanées : c'est ce qui fait passer le rendu de plusieurs minutes
+// (script séquentiel) a quelques secondes.
 //
-// buffer = { lat, lon, widthM, pxW, pxH } : l'emprise reellement telechargee, plus
-// large que ce qui sera affiche, pour que zoom et deplacement restent hors reseau.
+// buffer = { lat, lon, widthM, pxW, pxH } : l'emprise réellement téléchargée, plus
+// large que ce qui sera affiche, pour que zoom et déplacement restent hors réseau.
 export async function loadAllEpochs(buffer, onProgress) {
   const { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } = buffer
   const bbox = bboxAround(lat, lon, widthM, aspect)
@@ -123,16 +123,22 @@ export async function loadAllEpochs(buffer, onProgress) {
 
   const todo = [...lisibles, ...LAYERS]
   let done = 0
+  let trouvees = 0
   const results = await Promise.all(
     todo.map(async ([layer, fmt, year, label]) => {
+      let trouve = null
       try {
         const epoch = await loadEpoch(layer, fmt, label, bbox, pxW, pxH)
+        if (epoch) { trouvees++; trouve = label }
         return epoch ? { ...epoch, year } : null
       } catch {
-        // Echouer visible plutot que faire disparaitre une decennie en silence.
+        // Échouer visible plutôt que faire disparaître une décennie en silence.
         return { year, label, error: true }
       } finally {
-        onProgress?.(++done, todo.length)
+        // `done` = couches interrogées (l'avancement), `trouvees` = vues réellement
+        // récupérées. Les confondre afficherait un compte faux : la plupart des
+        // millésimes ne couvrent pas un point donne.
+        onProgress?.(++done, todo.length, trouvees, trouve)
       }
     }),
   )

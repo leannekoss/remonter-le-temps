@@ -1,7 +1,7 @@
-// Base Adresse Nationale (gratuite, sans cle, CORS ouvert).
-// Mesure du 28/07 : aller-retour a 16 m sur une adresse rurale avec numero.
-// En revanche un lieu-dit sans numero retombe sur le centre de la commune, voire
-// sur une autre commune -> d'ou le collage de coordonnees en filet de securite.
+// Base Adresse Nationale (gratuite, sans clé, CORS ouvert).
+// Mesure du 28/07 : aller-retour a 16 m sur une adresse rurale avec numéro.
+// En revanche un lieu-dit sans numéro retombe sur le centre de la commune, voire
+// sur une autre commune -> d'ou le collage de coordonnées en filet de sécurité.
 
 const BAN = 'https://api-adresse.data.gouv.fr'
 
@@ -29,7 +29,7 @@ export async function reverse(lat, lon) {
   return features[0]?.properties.label ?? null
 }
 
-// "44.56605, 0.73237" colle depuis Google Maps (clic droit > copier les coordonnees).
+// "44.56605, 0.73237" colle depuis Google Maps (clic droit > copier les coordonnées).
 export function parseCoords(text) {
   const m = text.trim().match(/^(-?\d{1,3}[.,]\d+)[,;\s]+(-?\d{1,3}[.,]\d+)$/)
   if (!m) return null
