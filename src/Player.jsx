@@ -17,7 +17,7 @@ function pickMime() {
   return candidats.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? ''
 }
 
-export default function Player({ epochs, buffer, view, onViewChange, onRecordingChange }) {
+export default function Player({ epochs, buffer, view, cle, onViewChange, onRecordingChange }) {
   const canvasRef = useRef(null)
   const rafRef = useRef(0)
   const indexRef = useRef(0)
@@ -38,12 +38,14 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   // ferait redemarrer l'effet a chaque cran de molette.
   viewRef.current = view
 
-  // Un nouveau lieu peut avoir moins de millésimes que le précédent : sans remise a
-  // zéro, la boucle lirait un index qui n'existe plus.
+  // Un nouveau lieu peut avoir moins de millésimes que le précédent : sans remise à
+  // zéro, la boucle lirait un index qui n'existe plus. On se cale sur le LIEU et non
+  // sur le tableau : celui-ci s'enrichit pendant le chargement progressif, et repartir
+  // de zéro à chaque vue reçue ferait bégayer l'animation.
   useEffect(() => {
     indexRef.current = 0
     setIndex(0)
-  }, [epochs])
+  }, [cle])
 
   const goTo = (i) => {
     const clamped = Math.max(0, Math.min(total - 1, i))
@@ -202,6 +204,12 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
 
   if (total === 0) return null
   const annee = epochs[index]?.label ?? ''
+  // Un bouton qui ne repond pas est pire qu'un bouton absent : on verifie le support
+  // avant de l'afficher, plutot que d'echouer en silence au clic.
+  const videoPossible =
+    typeof MediaRecorder !== 'undefined' &&
+    !!canvasRef.current?.captureStream &&
+    !!pickMime()
 
   return (
     <figure className="m-0 min-w-0">
@@ -280,15 +288,22 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
           value={index}
           onChange={(e) => { setPlaying(false); goTo(Number(e.target.value)) }}
           aria-label="Choisir le millésime"
+          aria-valuetext={annee}
           className="h-11 flex-1 accent-[var(--color-vermillon)]"
         />
 
-        <button
-          onClick={exporter}
-          className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
-        >
-          Créer la vidéo
-        </button>
+        {videoPossible ? (
+          <button
+            onClick={exporter}
+            className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
+          >
+            Créer la vidéo
+          </button>
+        ) : (
+          <span className="shrink-0 text-xs text-[var(--color-attenue)]">
+            Export vidéo indisponible sur ce navigateur
+          </span>
+        )}
       </div>
 
       {video && (

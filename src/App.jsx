@@ -71,17 +71,38 @@ export default function App() {
     if (keepVisible) setRefining(true)
     else setProgress({ done: 0, total: 0, trouvees: 0, dernier: null })
     try {
-      const res = await loadAllEpochs(buffer, (done, total, trouvees, trouve) => {
-        if (run !== runRef.current || keepVisible) return
-        setProgress((p) => ({ done, total, trouvees, dernier: trouve ?? p?.dernier ?? null }))
-      })
+      const res = await loadAllEpochs(
+        buffer,
+        (done, total, trouvees, trouve) => {
+          if (run !== runRef.current || keepVisible) return
+          setProgress((p) => ({ done, total, trouvees, dernier: trouve ?? p?.dernier ?? null }))
+        },
+        // Affichage progressif : la premiere vue arrive en une seconde environ, on la
+        // montre au lieu d'attendre les 19 couches. On ne le fait qu'au premier
+        // chargement : pendant un affinage, remplacer l'image en cours ferait clignoter
+        // la vue entre deux tampons.
+        keepVisible
+          ? undefined
+          : (epoch) => {
+              if (run !== runRef.current) return
+              setData((d) => {
+                const cle = `${buffer.lat},${buffer.lon},${buffer.viewWidthM}`
+                const base = d && d.cle === cle ? d.epochs : []
+                const epochs = [...base, epoch].sort((a, b) => a.year - b.year)
+                return { cle, epochs, buffer, failed: d?.failed ?? [], tropSerrees: d?.tropSerrees ?? [] }
+              })
+            },
+      )
       if (run !== runRef.current) return          // une demande plus recente a pris la main
       if (res.epochs.length === 0) {
         setError("Aucune photo aérienne ne couvre ce point. L'IGN couvre la France et ses outre-mer.")
         if (!keepVisible) setData(null)
         return
       }
-      setData({ epochs: res.epochs, buffer, failed: res.failed, tropSerrees: res.tropSerrees })
+      setData({
+        cle: `${buffer.lat},${buffer.lon},${buffer.viewWidthM}`,
+        epochs: res.epochs, buffer, failed: res.failed, tropSerrees: res.tropSerrees,
+      })
     } catch {
       if (run === runRef.current) setError("Le service de l'IGN ne répond pas. Réessayez dans un instant.")
     } finally {
@@ -103,10 +124,14 @@ export default function App() {
   useEffect(() => {
     if (!view) return
     const t = setTimeout(() => {
+      // Le libellé n'est PAS écrit dans l'URL : un lien partagé voyage loin (historique
+      // du destinataire, messageries, journaux serveur) et emporterait l'adresse du
+      // domicile en clair. Les coordonnées sont arrondies à 4 décimales, soit une
+      // dizaine de mètres - assez pour retrouver le lieu, pas pour désigner une porte.
       const u = new URL(window.location.href)
       u.search = new URLSearchParams({
-        lat: view.lat.toFixed(5), lon: view.lon.toFixed(5),
-        w: String(Math.round(view.widthM)), l: place?.label ?? '',
+        lat: view.lat.toFixed(4), lon: view.lon.toFixed(4),
+        w: String(Math.round(view.widthM)),
       }).toString()
       window.history.replaceState({}, '', u)
     }, SETTLE)
@@ -118,6 +143,7 @@ export default function App() {
     bootRef.current = true
     const fromUrl = readUrl()
     if (fromUrl) {
+      // Les anciens liens portaient encore un libellé : on l'accepte, on ne le réémet pas.
       setQuery(fromUrl.label)
       setPlace({ label: fromUrl.label, type: 'housenumber', score: 1 })
       setView(fromUrl.view)
@@ -318,6 +344,7 @@ export default function App() {
           <Player
             epochs={data.epochs}
             buffer={data.buffer}
+            cle={data.cle}
             view={view}
             onViewChange={setView}
             onRecordingChange={setRecording}
@@ -331,8 +358,9 @@ export default function App() {
               {shared ? 'Lien copié' : 'Partager ce lieu'}
             </button>
             <span className="text-sm text-[var(--color-attenue)]">
-              {data.epochs.length} millésimes
-              {data.failed.length > 0 && `, ${data.failed.length} indisponibles`}
+              {data.epochs.length} millésime{data.epochs.length > 1 ? 's' : ''}
+              {data.failed.length > 0 &&
+                ` - ${data.failed.length === 1 ? 'un millésime indisponible' : `${data.failed.length} millésimes indisponibles`} (${data.failed.join(', ')})`}
               {refining && ' - affinage...'}
             </span>
           </div>
@@ -387,8 +415,14 @@ export default function App() {
         <p className="mt-2">
           L'IGN photographie la France par rotation : tous les départements ne sont pas
           survolés chaque année, le nombre de millésimes varie donc selon les endroits.
-          Aucune donnée n'est collectée, aucun script tiers n'est chargé, tout le traitement
-          se fait dans votre navigateur.
+        </p>
+        <p className="mt-2">
+          Ce site ne stocke rien, n'a pas de serveur et ne charge aucun script tiers : tout
+          le traitement se fait dans votre navigateur. Il interroge en revanche deux services
+          publics directement depuis votre appareil, qui reçoivent donc vos requêtes : la Base
+          Adresse Nationale reçoit l'adresse que vous tapez, ou votre position si vous
+          l'autorisez, et l'IGN reçoit les coordonnées de la vue affichée. Ce qu'ils en
+          conservent relève de leurs propres conditions.
         </p>
       </footer>
     </div>

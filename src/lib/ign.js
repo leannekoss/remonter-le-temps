@@ -113,7 +113,9 @@ export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
 //
 // buffer = { lat, lon, widthM, pxW, pxH } : l'emprise réellement téléchargée, plus
 // large que ce qui sera affiche, pour que zoom et déplacement restent hors réseau.
-export async function loadAllEpochs(buffer, onProgress) {
+// `onEpoch` reçoit chaque vue dès qu'elle arrive, deduplication faite : c'est ce qui
+// permet d'afficher quelque chose au bout d'une seconde au lieu d'attendre les 19 couches.
+export async function loadAllEpochs(buffer, onProgress, onEpoch) {
   const { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } = buffer
   const bbox = bboxAround(lat, lon, widthM, aspect)
 
@@ -122,6 +124,7 @@ export async function loadAllEpochs(buffer, onProgress) {
     .map(([, , , label, minW]) => ({ label, minWidthM: minW }))
 
   const todo = [...lisibles, ...LAYERS]
+  const seen = new Set()
   let done = 0
   let trouvees = 0
   const results = await Promise.all(
@@ -129,7 +132,13 @@ export async function loadAllEpochs(buffer, onProgress) {
       let trouve = null
       try {
         const epoch = await loadEpoch(layer, fmt, label, bbox, pxW, pxH)
-        if (epoch) { trouvees++; trouve = label }
+        if (epoch && seen.has(epoch.hash)) { epoch.bitmap.close?.(); return null }
+        if (epoch) {
+          seen.add(epoch.hash)
+          trouvees++
+          trouve = label
+          onEpoch?.({ ...epoch, year })
+        }
         return epoch ? { ...epoch, year } : null
       } catch {
         // Échouer visible plutôt que faire disparaître une décennie en silence.
@@ -143,13 +152,10 @@ export async function loadAllEpochs(buffer, onProgress) {
     }),
   )
 
-  const seen = new Set()
   const epochs = []
   const failed = []
   for (const r of results.filter(Boolean).sort((a, b) => a.year - b.year)) {
     if (r.error) { failed.push(r.label); continue }
-    if (seen.has(r.hash)) { r.bitmap.close?.(); continue }
-    seen.add(r.hash)
     epochs.push(r)
   }
   return { epochs, failed, tropSerrees }

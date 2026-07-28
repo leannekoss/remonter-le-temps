@@ -5,3 +5,5 @@ dist
 *.local
 .env*
 .impeccable
+.playwright-mcp
+/*.png
