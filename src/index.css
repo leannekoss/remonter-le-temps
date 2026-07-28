@@ -1,16 +1,72 @@
 @import "tailwindcss";
 
+/* Archivo : grotesque de signaletique, chiffres tabulaires - les annees ne dansent pas
+   d'un millesime a l'autre. Auto-hebergee : la page promet que rien ne sort d'ici,
+   charger des polices chez Google rendrait cette promesse fausse. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/archivo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC,
+    U+0304, U+0308, U+0329, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+    U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('/fonts/archivo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF,
+    U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB,
+    U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+/* Encre chaude, pas ardoise bleutee : le bleu-gris est la signature de l'app SaaS
+   generique, explicitement ecartee. L'accent vermillon est repris des batiments
+   dessines en rouge sur la carte d'etat-major - il vient de la matiere, pas d'un
+   nuancier. Contrastes verifies : texte 17.0:1, attenue 8.6:1, accent 5.5:1. */
 @theme {
-  --color-ink: #0b1017;
-  --color-ink-soft: #141c27;
-  --color-line: #24303f;
+  --color-encre: #130f0a;
+  --color-surface: #221d17;
+  --color-filet: #3b342d;
+  --color-craie: #f4f1ec;
+  --color-attenue: #b2ada4;
+  --color-vermillon: #e26239;
+
+  --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
 }
 
 html, body, #root { height: 100%; }
 
 body {
-  background: var(--color-ink);
-  color: #e8edf4;
-  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: var(--color-encre);
+  color: var(--color-craie);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
+/* Toute cible tactile atteint 44 px sans grossir visuellement : la zone deborde. */
+.tap {
+  position: relative;
+}
+.tap::after {
+  content: '';
+  position: absolute;
+  inset: 50% 0 auto 0;
+  translate: 0 -50%;
+  height: max(100%, 44px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

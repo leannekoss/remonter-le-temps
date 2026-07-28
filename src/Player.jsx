@@ -1,14 +1,22 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { sourceRect, zoomAt, panBy } from './lib/view.js'
 
 const HOLD = 1100   // ms d'affichage plein d'un millesime
 const FADE = 700    // ms de fondu vers le suivant
 const CANVAS_W = 1200
-const CANVAS_H = 800
 
-// Lecture en fondu enchaine sur canvas, avec zoom et deplacement libres.
-// Le canvas sert aussi de source a l'enregistrement video : pas de ffmpeg,
-// pas de serveur, et l'export reprend le cadrage choisi par l'utilisateur.
+const reduceMotion = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+// Safari sait enregistrer en MP4 depuis la 17, ce que tout le monde sait relire.
+// Ailleurs on retombe sur WebM. On demande le type au navigateur plutot que de le
+// supposer : un MediaRecorder cree avec un type non supporte leve.
+function pickMime() {
+  const candidats = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm']
+  return candidats.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? ''
+}
+
 export default function Player({ epochs, buffer, view, onViewChange, onRecordingChange }) {
   const canvasRef = useRef(null)
   const rafRef = useRef(0)
@@ -16,11 +24,14 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   const viewRef = useRef(view)
   const pointersRef = useRef(new Map())
   const pinchRef = useRef(null)
-  const [playing, setPlaying] = useState(true)
+  const sobre = useMemo(reduceMotion, [])
+  const [playing, setPlaying] = useState(!sobre)
   const [index, setIndex] = useState(0)
 
   const total = epochs.length
-  const cycle = HOLD + FADE
+  const fade = sobre ? 0 : FADE
+  const cycle = HOLD + fade
+  const canvasH = Math.round(CANVAS_W * buffer.aspect)
 
   // La boucle d'animation lit la vue dans une ref : la mettre dans les dependances
   // ferait redemarrer l'effet a chaque cran de molette.
@@ -34,8 +45,9 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   }, [epochs])
 
   const goTo = (i) => {
-    indexRef.current = i
-    setIndex(i)
+    const clamped = Math.max(0, Math.min(total - 1, i))
+    indexRef.current = clamped
+    setIndex(clamped)
   }
 
   useEffect(() => {
@@ -43,17 +55,17 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     if (!canvas || total === 0) return
     const ctx = canvas.getContext('2d')
     canvas.width = CANVAS_W
-    canvas.height = CANVAS_H
+    canvas.height = canvasH
 
     const draw = (i, next, alpha) => {
       const current = epochs[i]
       if (!current) return
       const { sx, sy, sw, sh } = sourceRect(viewRef.current, buffer)
       ctx.globalAlpha = 1
-      ctx.drawImage(current.bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, CANVAS_H)
+      ctx.drawImage(current.bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, canvasH)
       if (alpha > 0 && epochs[next]) {
         ctx.globalAlpha = alpha
-        ctx.drawImage(epochs[next].bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, CANVAS_H)
+        ctx.drawImage(epochs[next].bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, canvasH)
         ctx.globalAlpha = 1
       }
     }
@@ -68,7 +80,7 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
       const elapsed = (now - start) % (total * cycle)
       const i = Math.floor(elapsed / cycle)
       const inCycle = elapsed - i * cycle
-      const alpha = inCycle > HOLD ? (inCycle - HOLD) / FADE : 0
+      const alpha = fade > 0 && inCycle > HOLD ? (inCycle - HOLD) / fade : 0
       draw(i, (i + 1) % total, alpha)
       if (i !== indexRef.current) {
         indexRef.current = i
@@ -78,55 +90,39 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     }
     rafRef.current = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(rafRef.current)
-  }, [epochs, buffer, playing, total, cycle])
+  }, [epochs, buffer, playing, total, cycle, fade, canvasH])
 
   // En pause, un geste ne relance pas la boucle : il faut redessiner a la main.
   useEffect(() => {
     if (playing || total === 0) return
-    const canvas = canvasRef.current
-    const ctx = canvas?.getContext('2d')
+    const ctx = canvasRef.current?.getContext('2d')
     const current = epochs[Math.min(indexRef.current, total - 1)]
     if (!ctx || !current) return
     const { sx, sy, sw, sh } = sourceRect(view, buffer)
     ctx.globalAlpha = 1
-    ctx.drawImage(current.bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, CANVAS_H)
-  }, [view, buffer, playing, epochs, total, index])
+    ctx.drawImage(current.bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, canvasH)
+  }, [view, buffer, playing, epochs, total, index, canvasH])
 
   // Molette : listener non passif, sinon preventDefault est ignore et la page defile.
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const toCanvas = (e) => {
-      const r = canvas.getBoundingClientRect()
-      const k = CANVAS_W / r.width
-      return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k }
-    }
     const onWheel = (e) => {
       e.preventDefault()
-      const { x, y } = toCanvas(e)
-      const factor = Math.exp(e.deltaY * 0.0012)
-      onViewChange(zoomAt(viewRef.current, factor, CANVAS_W, CANVAS_H, x, y))
+      const r = canvas.getBoundingClientRect()
+      const k = CANVAS_W / r.width
+      onViewChange(zoomAt(viewRef.current, Math.exp(e.deltaY * 0.0012), CANVAS_W, canvasH,
+        (e.clientX - r.left) * k, (e.clientY - r.top) * k))
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-  }, [onViewChange])
-
-  const canvasScale = () => {
-    const r = canvasRef.current.getBoundingClientRect()
-    return CANVAS_W / r.width
-  }
+  }, [onViewChange, canvasH])
 
   const onPointerDown = (e) => {
-    // Enregistrer le pointeur d'abord : la capture est un confort (suivre le geste
-    // hors du canvas), et elle peut echouer. Si elle levait avant l'enregistrement,
-    // le deplacement ne demarrerait jamais.
+    // Enregistrer le pointeur d'abord : la capture est un confort et peut echouer.
     pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     pinchRef.current = null
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      /* pointeur deja relache ou capture ailleurs : le glisse marche quand meme */
-    }
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* le glisse marche quand meme */ }
   }
 
   const onPointerMove = (e) => {
@@ -134,22 +130,19 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     if (!pts.has(e.pointerId)) return
     const prev = pts.get(e.pointerId)
     pts.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    const r = canvasRef.current.getBoundingClientRect()
+    const k = CANVAS_W / r.width
 
     if (pts.size >= 2) {
       const [a, b] = [...pts.values()]
       const dist = Math.hypot(a.x - b.x, a.y - b.y)
       if (pinchRef.current) {
-        const r = canvasRef.current.getBoundingClientRect()
-        const k = CANVAS_W / r.width
-        const mx = ((a.x + b.x) / 2 - r.left) * k
-        const my = ((a.y + b.y) / 2 - r.top) * k
-        onViewChange(zoomAt(viewRef.current, pinchRef.current / dist, CANVAS_W, CANVAS_H, mx, my))
+        onViewChange(zoomAt(viewRef.current, pinchRef.current / dist, CANVAS_W, canvasH,
+          ((a.x + b.x) / 2 - r.left) * k, ((a.y + b.y) / 2 - r.top) * k))
       }
       pinchRef.current = dist
       return
     }
-
-    const k = canvasScale()
     onViewChange(panBy(viewRef.current, (e.clientX - prev.x) * k, (e.clientY - prev.y) * k, CANVAS_W))
   }
 
@@ -158,22 +151,39 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
     if (pointersRef.current.size < 2) pinchRef.current = null
   }
 
-  const download = async () => {
+  const onKeyDown = (e) => {
+    const pas = { ArrowLeft: -1, ArrowRight: 1 }[e.key]
+    if (pas) { e.preventDefault(); setPlaying(false); goTo(indexRef.current + pas) }
+    if (e.key === ' ') { e.preventDefault(); setPlaying((p) => !p) }
+  }
+
+  // Enregistre un tour complet puis propose le partage natif ; a defaut, telecharge.
+  const exporter = async () => {
     const canvas = canvasRef.current
     if (!canvas?.captureStream) return
+    const type = pickMime()
+    if (!type) return
     onRecordingChange?.(true)
-    const stream = canvas.captureStream(30)
     const chunks = []
-    const rec = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' })
+    const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: type })
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
-    rec.onstop = () => {
-      const url = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' }))
+    rec.onstop = async () => {
+      const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm'
+      const blob = new Blob(chunks, { type })
+      const file = new File([blob], `remonter-le-temps.${ext}`, { type })
+      onRecordingChange?.(false)
+      if (navigator.canShare?.({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file], title: 'Remonter le temps' })
+          return
+        } catch { /* partage annule : on retombe sur le telechargement */ }
+      }
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = 'remonter-le-temps.webm'
+      a.download = file.name
       a.click()
       URL.revokeObjectURL(url)
-      onRecordingChange?.(false)
     }
     setPlaying(true)
     rec.start()
@@ -181,65 +191,91 @@ export default function Player({ epochs, buffer, view, onViewChange, onRecording
   }
 
   if (total === 0) return null
+  const annee = epochs[index]?.label ?? ''
 
   return (
-    <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-xl border border-[var(--color-line)] bg-black">
+    <figure className="m-0">
+      <div className="relative overflow-hidden rounded-lg bg-black">
         <canvas
           ref={canvasRef}
+          tabIndex={0}
+          role="img"
+          aria-label={`Vue aerienne du lieu, millesime ${annee}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
-          className="block w-full cursor-grab touch-none active:cursor-grabbing"
+          onKeyDown={onKeyDown}
+          className="block w-full cursor-grab touch-none outline-none active:cursor-grabbing focus-visible:ring-2 focus-visible:ring-[var(--color-vermillon)]"
         />
-        <div className="pointer-events-none absolute bottom-3 left-3 rounded-md bg-black/65 px-3 py-1.5 text-2xl font-semibold tabular-nums backdrop-blur-sm sm:text-3xl">
-          {epochs[index]?.label}
-        </div>
-        <div className="pointer-events-none absolute right-3 bottom-3 rounded-md bg-black/55 px-2 py-1 text-xs tabular-nums text-slate-300 backdrop-blur-sm">
-          {Math.round(view.widthM)} m de large
+
+        {/* L'annee est la charge emotionnelle : c'est le seul element qui a le droit
+            d'etre grand. Voile en degrade pour rester lisible sur un toit clair. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/35 to-transparent pt-16 pb-4 pl-4 pr-4">
+          <div className="flex items-end justify-between gap-3">
+            <span className="text-[clamp(2.25rem,9vw,3.75rem)] leading-[0.85] font-semibold tabular-nums tracking-[-0.02em]">
+              {annee}
+            </span>
+            <span className="pb-1 text-xs tabular-nums text-white/70">
+              {Math.round(view.widthM)} m
+            </span>
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <figcaption className="sr-only">
+        Timelapse des photographies aeriennes de l'IGN pour ce lieu.
+      </figcaption>
+
+      <div className="mt-3 flex items-center gap-2">
         <button
           onClick={() => setPlaying((p) => !p)}
-          className="rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-2 text-sm hover:border-slate-500"
+          aria-label={playing ? 'Mettre en pause' : 'Lancer la lecture'}
+          className="tap grid h-11 w-11 shrink-0 place-items-center rounded-full border border-[var(--color-filet)] text-[var(--color-craie)] transition-colors hover:border-[var(--color-vermillon)]"
         >
-          {playing ? 'Pause' : 'Lecture'}
+          {playing ? (
+            <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><rect x="1" y="1" width="4" height="14" fill="currentColor"/><rect x="9" y="1" width="4" height="14" fill="currentColor"/></svg>
+          ) : (
+            <svg width="14" height="16" viewBox="0 0 14 16" aria-hidden="true"><path d="M2 1l11 7-11 7z" fill="currentColor"/></svg>
+          )}
         </button>
+
         <input
           type="range"
           min={0}
           max={total - 1}
           value={index}
           onChange={(e) => { setPlaying(false); goTo(Number(e.target.value)) }}
-          className="h-1 min-w-40 flex-1 accent-sky-400"
           aria-label="Choisir le millesime"
+          className="h-11 flex-1 accent-[var(--color-vermillon)]"
         />
+
         <button
-          onClick={download}
-          className="rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-2 text-sm hover:border-slate-500"
+          onClick={exporter}
+          className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
         >
-          Telecharger la video
+          Video
         </button>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
+      {/* La frise nommee est confortable a la souris, mais elle ferait seize cibles
+          minuscules sur telephone : la reglette ci-dessus y suffit. */}
+      <div className="mt-2 hidden flex-wrap gap-1.5 sm:flex">
         {epochs.map((e, i) => (
           <button
             key={e.label}
             onClick={() => { setPlaying(false); goTo(i) }}
-            className={`rounded px-2 py-1 text-xs tabular-nums transition ${
+            aria-current={i === index}
+            className={`h-9 rounded px-2.5 text-xs tabular-nums transition-colors ${
               i === index
-                ? 'bg-sky-500/20 text-sky-200 ring-1 ring-sky-500/40'
-                : 'bg-[var(--color-ink-soft)] text-slate-400 hover:text-slate-200'
+                ? 'bg-[var(--color-vermillon)] text-[var(--color-encre)]'
+                : 'text-[var(--color-attenue)] hover:text-[var(--color-craie)]'
             }`}
           >
             {e.label}
           </button>
         ))}
       </div>
-    </div>
+    </figure>
   )
 }

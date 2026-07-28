@@ -4,8 +4,13 @@
 // puis on recadre dedans. Tant que le geste reste dans le tampon, aucune requete
 // reseau - juste un drawImage avec un rectangle source.
 //
-// vue    = { lat, lon, widthM }   la fenetre affichee (hauteur = 2/3 de la largeur)
-// tampon = vue + { pxW, pxH }     ce qui a reellement ete telecharge
+// vue    = { lat, lon, widthM }        la fenetre affichee
+// tampon = vue + { aspect, pxW, pxH }  ce qui a reellement ete telecharge
+//
+// Le format n'est PAS une contrainte de la donnee : l'IGN rend n'importe quelle
+// emprise. C'est un choix de mise en page. Sur telephone tenu droit, une image en
+// 3:2 occupe un quart de l'ecran alors qu'elle EST le produit - d'ou un cadrage
+// portrait en 4:5, qui est aussi le format qui passe le mieux en story.
 
 const M_PER_DEG = 111320
 const BUFFER_RATIO = 2      // le tampon couvre 2x la largeur affichee
@@ -18,17 +23,25 @@ export const clampWidth = (m) => Math.min(MAX_WIDTH_M, Math.max(MIN_WIDTH_M, m))
 
 const mPerDegLon = (lat) => M_PER_DEG * Math.cos((lat * Math.PI) / 180)
 
-// data.geopf.fr accepte jusqu'a 5000 px de cote (sonde le 28/07), on reste tres en dessous.
-// Sur petit ecran on descend a 1800 px : 4x moins d'octets pour un rendu identique.
-export function bufferFor(view) {
-  const pxW = typeof window !== 'undefined' && window.innerWidth < 700 ? 1800 : 2400
+// hauteur / largeur de la fenetre affichee
+export function aspectFor(viewportWidth) {
+  return viewportWidth < 640 ? 1.25 : 2 / 3
+}
+
+// data.geopf.fr accepte jusqu'a 5000 px de cote (sonde le 28/07), on reste tres en
+// dessous. Sur petit ecran on descend en definition : autant d'octets en moins sur
+// un forfait mobile, pour un rendu identique a l'oeil.
+export function bufferFor(view, viewportWidth) {
+  const aspect = aspectFor(viewportWidth)
+  const pxW = viewportWidth < 640 ? 1400 : 2400
   return {
     lat: view.lat,
     lon: view.lon,
     widthM: view.widthM * BUFFER_RATIO,
-    viewWidthM: view.widthM,   // sert a decider quelles cartes anciennes sont lisibles
+    viewWidthM: view.widthM,
+    aspect,
     pxW,
-    pxH: Math.round((pxW * 2) / 3),
+    pxH: Math.round(pxW * aspect),
   }
 }
 
@@ -38,7 +51,7 @@ export function sourceRect(view, buffer) {
   const dxM = (view.lon - buffer.lon) * mPerDegLon(buffer.lat)
   const dyM = (view.lat - buffer.lat) * M_PER_DEG
   const sw = view.widthM * pxPerM
-  const sh = ((view.widthM * 2) / 3) * pxPerM
+  const sh = view.widthM * buffer.aspect * pxPerM
   return {
     sx: buffer.pxW / 2 + dxM * pxPerM - sw / 2,
     sy: buffer.pxH / 2 - dyM * pxPerM - sh / 2,   // le nord monte, les pixels descendent
@@ -47,10 +60,12 @@ export function sourceRect(view, buffer) {
   }
 }
 
-// Deux raisons de retelecharger : on est sorti du tampon, ou on a zoome au point
-// de reclamer plus de definition qu'il n'en contient.
-export function needsRefetch(view, buffer, canvasW) {
+// Trois raisons de retelecharger : on est sorti du tampon, on a zoome au point de
+// reclamer plus de definition qu'il n'en contient, ou l'ecran a change de format
+// (rotation du telephone, passage mobile <-> bureau).
+export function needsRefetch(view, buffer, canvasW, viewportWidth) {
   if (!buffer) return true
+  if (Math.abs(buffer.aspect - aspectFor(viewportWidth)) > 0.01) return true
   const { sx, sy, sw, sh } = sourceRect(view, buffer)
   if (sx < 0 || sy < 0 || sx + sw > buffer.pxW || sy + sh > buffer.pxH) return true
   return sw * MAX_UPSCALE < canvasW

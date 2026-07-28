@@ -33,10 +33,11 @@ export const HISTORIC = [
   ['GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 'jpeg', 1840, 'vers 1840 - etat-major', 700],
 ]
 
-// Emprise centree sur le point. Hauteur = 2/3 de la largeur (format paysage).
+// Emprise centree sur le point. `aspect` = hauteur / largeur : 2/3 en paysage sur
+// grand ecran, 1.25 en portrait sur telephone.
 // WMS 1.3.0 en EPSG:4326 attend la bbox en lat,lon - pas l'inverse.
-export function bboxAround(lat, lon, widthM) {
-  const heightM = (widthM * 2) / 3
+export function bboxAround(lat, lon, widthM, aspect = 2 / 3) {
+  const heightM = widthM * aspect
   const dLat = heightM / 111320
   const dLon = widthM / (111320 * Math.cos((lat * Math.PI) / 180))
   return [lat - dLat / 2, lon - dLon / 2, lat + dLat / 2, lon + dLon / 2].join(',')
@@ -113,8 +114,8 @@ export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
 // buffer = { lat, lon, widthM, pxW, pxH } : l'emprise reellement telechargee, plus
 // large que ce qui sera affiche, pour que zoom et deplacement restent hors reseau.
 export async function loadAllEpochs(buffer, onProgress) {
-  const { lat, lon, widthM, viewWidthM, pxW, pxH } = buffer
-  const bbox = bboxAround(lat, lon, widthM)
+  const { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } = buffer
+  const bbox = bboxAround(lat, lon, widthM, aspect)
 
   const lisibles = HISTORIC.filter(([, , , , minW]) => viewWidthM >= minW)
   const tropSerrees = HISTORIC.filter(([, , , , minW]) => viewWidthM < minW)

@@ -19,28 +19,41 @@ function readUrl() {
 export default function App() {
   const [query, setQuery] = useState('')
   const [options, setOptions] = useState([])
+  const [typing, setTyping] = useState(false)
   const [place, setPlace] = useState(null)      // metadonnees de geocodage, pour le message
   const [view, setView] = useState(null)        // fenetre affichee
-  const [data, setData] = useState(null)        // { epochs, buffer, failed }
+  const [data, setData] = useState(null)        // { epochs, buffer, failed, tropSerrees }
   const [progress, setProgress] = useState(null)
   const [refining, setRefining] = useState(false)
   const [error, setError] = useState('')
   const [recording, setRecording] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [shared, setShared] = useState(false)
+  const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth))
   const bootRef = useRef(false)
   const runRef = useRef(0)
 
+  // La rotation du telephone change le format de la vue, donc le tampon a retelecharger.
   useEffect(() => {
-    if (parseCoords(query)) { setOptions([]); return }
+    let t
+    const onResize = () => { clearTimeout(t); t = setTimeout(() => setVw(window.innerWidth), 250) }
+    window.addEventListener('resize', onResize)
+    return () => { window.removeEventListener('resize', onResize); clearTimeout(t) }
+  }, [])
+
+  // On ne propose des adresses que si l'utilisateur tape vraiment. Sans ce garde-fou,
+  // un lien partage (qui arrive avec un libelle dans l'URL) ouvre la liste tout seul
+  // et recouvre l'image des l'arrivee.
+  useEffect(() => {
+    if (!typing || parseCoords(query)) { setOptions([]); return }
     const t = setTimeout(() => {
       suggest(query).then(setOptions).catch(() => setOptions([]))
     }, 220)
     return () => clearTimeout(t)
-  }, [query])
+  }, [query, typing])
 
-  const load = useCallback(async (target, keepVisible) => {
+  const load = useCallback(async (target, keepVisible, viewportWidth) => {
     const run = ++runRef.current
-    const buffer = bufferFor(target)
+    const buffer = bufferFor(target, viewportWidth)
     setError('')
     if (keepVisible) setRefining(true)
     else setProgress({ done: 0, total: 1 })
@@ -50,27 +63,27 @@ export default function App() {
       })
       if (run !== runRef.current) return          // une demande plus recente a pris la main
       if (res.epochs.length === 0) {
-        setError("Aucune photo aerienne ne couvre ce point. L'IGN ne couvre que la France et ses outre-mer.")
+        setError("Aucune photo aerienne ne couvre ce point. L'IGN couvre la France et ses outre-mer.")
         if (!keepVisible) setData(null)
         return
       }
       setData({ epochs: res.epochs, buffer, failed: res.failed, tropSerrees: res.tropSerrees })
     } catch {
-      if (run === runRef.current) setError('Le service IGN ne repond pas. Reessayez dans un instant.')
+      if (run === runRef.current) setError("Le service de l'IGN ne repond pas. Reessayez dans un instant.")
     } finally {
       if (run === runRef.current) { setProgress(null); setRefining(false) }
     }
   }, [])
 
-  // Un geste ne declenche un telechargement que s'il sort du tampon ou reclame plus
-  // de definition qu'il n'en contient - et seulement une fois la main relachee.
+  // Un geste ne declenche un telechargement que s'il sort du tampon, reclame plus de
+  // definition, ou si le format d'ecran a change - et seulement la main relachee.
   useEffect(() => {
     if (!view) return
-    if (!data) { load(view, false); return }
-    if (!needsRefetch(view, data.buffer, CANVAS_W)) return
-    const t = setTimeout(() => load(view, true), SETTLE)
+    if (!data) { load(view, false, vw); return }
+    if (!needsRefetch(view, data.buffer, CANVAS_W, vw)) return
+    const t = setTimeout(() => load(view, true, vw), SETTLE)
     return () => clearTimeout(t)
-  }, [view, data, load])
+  }, [view, data, vw, load])
 
   // L'URL suit la vue, pour que le lien partage rejoue exactement le cadrage.
   useEffect(() => {
@@ -107,60 +120,77 @@ export default function App() {
     const coords = parseCoords(query)
     if (coords) {
       const label = (await reverse(coords.lat, coords.lon)) ?? `${coords.lat}, ${coords.lon}`
+      setTyping(false)
       return goTo({ ...coords, label, type: 'housenumber', score: 1 })
     }
-    if (options[0]) { setQuery(options[0].label); setOptions([]); goTo(options[0]) }
+    if (options[0]) { setTyping(false); setQuery(options[0].label); setOptions([]); goTo(options[0]) }
   }
 
   const locate = () => {
-    if (!navigator.geolocation) return setError('Votre navigateur ne sait pas se localiser.')
+    if (!navigator.geolocation) return setError("Votre navigateur ne sait pas se localiser.")
     navigator.geolocation.getCurrentPosition(
       async ({ coords }) => {
         const label = (await reverse(coords.latitude, coords.longitude)) ?? 'Ma position'
+        setTyping(false)
         setQuery(label)
         goTo({ lat: coords.latitude, lon: coords.longitude, label, type: 'housenumber', score: 1 })
       },
-      () => setError('Localisation refusee. Tapez plutot une adresse.'),
+      () => setError("Localisation refusee. Tapez plutot une adresse."),
       { enableHighAccuracy: true, timeout: 10000 },
     )
   }
 
-  const share = async () => {
+  // Une seule action de partage : la feuille native du telephone quand elle existe,
+  // la copie du lien sinon.
+  const partager = async () => {
+    const payload = {
+      title: 'Remonter le temps',
+      text: place?.label ? `${place.label}, vu du ciel depuis 1950` : 'Ce lieu, vu du ciel depuis 1950',
+      url: window.location.href,
+    }
+    if (navigator.share) {
+      try { await navigator.share(payload); return } catch { /* annule */ }
+    }
     await navigator.clipboard.writeText(window.location.href)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    setShared(true)
+    setTimeout(() => setShared(false), 2000)
   }
 
+  const champ = 'w-full rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] px-4 py-3 text-[16px] outline-none placeholder:text-[var(--color-attenue)] focus:border-[var(--color-vermillon)]'
+
   return (
-    <div className="mx-auto max-w-3xl px-4 py-10 sm:py-14">
-      <header className="mb-8">
-        <h1 className="text-3xl font-semibold tracking-tight sm:text-4xl">Remonter le temps</h1>
-        <p className="mt-2 max-w-xl text-slate-400">
+    <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 px-4 py-6 sm:py-12">
+      <header>
+        <h1 className="text-[clamp(1.75rem,6vw,2.75rem)] font-semibold leading-[1.05] tracking-[-0.025em]">
+          Remonter le temps
+        </h1>
+        <p className="mt-2 max-w-[60ch] text-[var(--color-attenue)]">
           Un lieu en France a travers le temps : les photos aeriennes de l'IGN depuis 1950,
-          et en dezoomant, la carte d'etat-major du XIXe siecle puis celle de Cassini.
+          et en dezoomant, la carte d'etat-major du XIX<sup>e</sup> siecle puis celle de Cassini.
         </p>
       </header>
 
-      <form onSubmit={submit} className="space-y-3">
+      <form onSubmit={submit} className="flex flex-col gap-3">
         <div className="flex gap-2">
           <div className="relative flex-1">
             <input
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Une adresse, ou des coordonnees collees"
-              className="w-full rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-3 outline-none placeholder:text-slate-500 focus:border-sky-500"
+              onChange={(e) => { setTyping(true); setQuery(e.target.value) }}
+              placeholder="Une adresse en France"
+              aria-label="Adresse ou coordonnees"
+              className={champ}
             />
             {options.length > 0 && query !== options[0]?.label && (
-              <ul className="absolute z-10 mt-1 w-full overflow-hidden rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] shadow-xl">
+              <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] shadow-2xl">
                 {options.map((o) => (
                   <li key={o.label + o.lat}>
                     <button
                       type="button"
-                      onClick={() => { setQuery(o.label); setOptions([]); goTo(o) }}
-                      className="block w-full px-4 py-2.5 text-left text-sm hover:bg-white/5"
+                      onClick={() => { setTyping(false); setQuery(o.label); setOptions([]); goTo(o) }}
+                      className="block w-full px-4 py-3 text-left text-sm hover:bg-white/5"
                     >
                       {o.label}
-                      <span className="ml-2 text-xs text-slate-500">{o.context}</span>
+                      <span className="ml-2 text-xs text-[var(--color-attenue)]">{o.context}</span>
                     </button>
                   </li>
                 ))}
@@ -170,52 +200,50 @@ export default function App() {
           <button
             type="button"
             onClick={locate}
-            className="rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-3 text-sm hover:border-slate-500"
+            aria-label="Utiliser ma position"
+            className="tap grid h-[50px] w-[50px] shrink-0 place-items-center rounded-lg border border-[var(--color-filet)] transition-colors hover:border-[var(--color-vermillon)]"
           >
-            Ma position
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="3.2" stroke="currentColor" strokeWidth="1.6"/>
+              <circle cx="10" cy="10" r="7" stroke="currentColor" strokeWidth="1.6" opacity=".45"/>
+              <path d="M10 .8v2.4M10 16.8v2.4M.8 10h2.4M16.8 10h2.4" stroke="currentColor" strokeWidth="1.6"/>
+            </svg>
           </button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 text-sm text-slate-400">
-          <span>Largeur de la vue</span>
+        <div className="flex flex-wrap items-center gap-1">
           {WIDTHS.map((w) => (
             <button
               key={w}
               type="button"
               onClick={() => view && setView({ ...view, widthM: w })}
-              className={`rounded-md px-3 py-1.5 tabular-nums transition ${
+              aria-pressed={!!view && Math.round(view.widthM) === w}
+              className={`tap h-11 rounded-lg px-3 text-sm tabular-nums transition-colors ${
                 view && Math.round(view.widthM) === w
-                  ? 'bg-sky-500/20 text-sky-200 ring-1 ring-sky-500/40'
-                  : 'bg-[var(--color-ink-soft)] hover:text-slate-200'
+                  ? 'bg-[var(--color-vermillon)] font-medium text-[var(--color-encre)]'
+                  : 'text-[var(--color-attenue)] hover:text-[var(--color-craie)]'
               }`}
             >
-              {w} m
+              {w >= 1000 ? `${w / 1000} km` : `${w} m`}
             </button>
           ))}
         </div>
       </form>
 
       {progress && (
-        <p className="mt-6 text-sm text-slate-400">
+        <p className="text-sm text-[var(--color-attenue)]" role="status">
           Chargement des millesimes... {progress.done}/{progress.total}
         </p>
       )}
 
       {error && (
-        <p className="mt-6 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+        <p role="alert" className="rounded-lg border border-[var(--color-vermillon)]/40 bg-[var(--color-vermillon)]/10 px-4 py-3 text-sm">
           {error}
         </p>
       )}
 
-      {place && isApproximate(place) && data && (
-        <p className="mt-6 rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-3 text-sm text-slate-300">
-          Ce point est approximatif : sans numero de rue, on tombe sur le centre de la commune.
-          Faites glisser l'image jusqu'a votre maison, et zoomez a la molette.
-        </p>
-      )}
-
       {data && view && (
-        <section className="mt-8 space-y-4">
+        <section className="flex flex-col gap-4">
           <Player
             epochs={data.epochs}
             buffer={data.buffer}
@@ -224,53 +252,60 @@ export default function App() {
             onRecordingChange={setRecording}
           />
 
-          <p className="text-xs text-slate-500">
-            Faites glisser pour deplacer, molette ou pincement pour zoomer.
-          </p>
-
-          {data.tropSerrees?.length > 0 && (
-            <p className="rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-3 text-sm text-slate-300">
-              Avant la photo aerienne, il y a les cartes. Dezoomez pour les faire apparaitre :
-              {' '}
-              {data.tropSerrees
-                .map((m) => `${m.label} a partir de ${m.minWidthM} m`)
-                .join(', ')}
-              . Elles ont ete dessinees a une echelle donnee, plus pres on ne verrait que le grain du papier.
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
             <button
-              onClick={share}
-              className="rounded-lg border border-[var(--color-line)] bg-[var(--color-ink-soft)] px-4 py-2 hover:border-slate-500"
+              onClick={partager}
+              className="tap h-11 rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
             >
-              {copied ? 'Lien copie' : 'Copier le lien de cette vue'}
+              {shared ? 'Lien copie' : 'Partager ce lieu'}
             </button>
-            <span className="text-slate-500">
-              {data.epochs.length} millesimes trouves
-              {data.failed.length > 0 && ` - ${data.failed.length} indisponibles (${data.failed.join(', ')})`}
+            <span className="text-sm text-[var(--color-attenue)]">
+              {data.epochs.length} millesimes
+              {data.failed.length > 0 && `, ${data.failed.length} indisponibles`}
+              {refining && ' - affinage...'}
             </span>
-            {refining && <span className="text-sky-300">Affinage...</span>}
           </div>
 
           {recording && (
-            <p className="text-sm text-sky-300">
-              Enregistrement en cours, laissez l'animation tourner jusqu'au bout...
+            <p role="status" className="text-sm text-[var(--color-vermillon)]">
+              Enregistrement en cours, laissez l'animation aller au bout.
+            </p>
+          )}
+
+          <p className="text-sm text-[var(--color-attenue)]">
+            Faites glisser l'image pour vous deplacer, pincez ou utilisez la molette pour zoomer.
+          </p>
+
+          {place && isApproximate(place) && (
+            <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
+              Ce point est approximatif : sans numero de rue, on tombe sur le centre de la
+              commune. Faites glisser l'image jusqu'a votre maison.
+            </p>
+          )}
+
+          {data.tropSerrees?.length > 0 && (
+            <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
+              Avant la photo aerienne, il y a les cartes. Dezoomez pour les faire apparaitre :{' '}
+              {data.tropSerrees.map((m) => `${m.label} a partir de ${m.minWidthM} m`).join(', ')}.
+              Elles ont ete dessinees a une echelle donnee ; plus pres, on ne verrait que le
+              grain du papier.
             </p>
           )}
         </section>
       )}
 
-      <footer className="mt-14 border-t border-[var(--color-line)] pt-6 text-xs leading-relaxed text-slate-500">
+      <footer className="mt-auto border-t border-[var(--color-filet)] pt-5 text-xs leading-relaxed text-[var(--color-attenue)]">
         <p>
-          Photos aeriennes, carte d'etat-major et carte de Cassini : IGN - Geoplateforme
-          (data.geopf.fr), sous Licence Ouverte Etalab 2.0. Cassini numerisee avec les
-          Archives nationales. Recherche d'adresse : Base Adresse Nationale.
+          Photographies aeriennes, carte d'etat-major et carte de Cassini : Institut national
+          de l'information geographique et forestiere (IGN), via data.geopf.fr, sous Licence
+          Ouverte Etalab 2.0. Cassini numerisee avec les Archives nationales. Donnees mises a
+          jour en 2026. Recherche d'adresse : Base Adresse Nationale.
         </p>
         <p className="mt-2">
-          L'IGN photographie la France par rotation, tous les departements ne sont pas survoles
-          chaque annee : le nombre de millesimes disponibles varie selon les endroits.
-          Aucune donnee n'est collectee, tout le traitement se fait dans votre navigateur.
+          L'IGN photographie la France par rotation : tous les departements ne sont pas
+          survoles chaque annee, le nombre de millesimes varie donc selon les endroits.
+          Aucune donnee n'est collectee, aucun script tiers n'est charge, tout le traitement
+          se fait dans votre navigateur.
         </p>
       </footer>
     </div>
