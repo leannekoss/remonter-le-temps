@@ -41,9 +41,16 @@ Le script `ign_gps_timelapse.py` ajoute une couche satellite via Esri Wayback
 redistribuable. Le site est donc 100 % IGN, sous Licence Ouverte Etalab 2.0,
 avec mention de la source.
 
-Les trois filtres du script sont portes tels quels : dalle vide au poids
-(< 12 ko), dalle blanche no-data (> 90 % de pixels quasi-blancs, testee sur
-canvas), doublon par hash SHA-256 du fichier.
+Deux des trois filtres du script sont portes tels quels : dalle blanche no-data
+(> 90 % de pixels quasi-blancs, testee sur canvas) et doublon par hash SHA-256.
+
+Le troisieme, le filtre au poids (< 12 ko = pas de couverture), a ete **retire
+volontairement**. `data.geopf.fr` tronque parfois ses reponses sous charge, et une
+reponse tronquee est legere : elle passait donc pour une absence de couverture, en
+silence. Constate en production le 28/07 - Cassini et l'etat-major disparaissaient
+sans le moindre message, puis reapparaissaient au rechargement suivant. On decode
+desormais toujours l'image : un flux coupe fait echouer le decodage, et le millesime
+s'affiche comme indisponible au lieu de s'evaporer.
 
 ## Fiabilite du point
 

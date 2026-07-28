@@ -51,7 +51,7 @@ function url(layer, fmt, bbox, pxW, pxH) {
   return `${WMS}?${q}`
 }
 
-async function get(u, tries = 3) {
+async function get(u, tries = 5) {
   let last
   for (let i = 0; i < tries; i++) {
     try {
@@ -96,7 +96,11 @@ export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
   if (blob.type.includes('xml') || blob.type.includes('text')) {
     blob = await get(url(layer, 'png', bbox, pxW, pxH))
   }
-  if (blob.size < 12000) return null
+  // Pas de filtre au poids : data.geopf.fr tronque parfois ses reponses sous charge,
+  // et une reponse tronquee est legere - elle passerait alors pour une absence de
+  // couverture, en silence. On decode toujours : un flux coupe fait echouer le decodage,
+  // l'erreur remonte et le millesime est affiche comme indisponible au lieu de
+  // disparaitre. Constate en production le 28/07 sur Cassini et l'etat-major.
   const bitmap = await createImageBitmap(blob)
   if (await isBlank(bitmap)) { bitmap.close?.(); return null }
   return { label, bitmap, hash: await digest(blob) }
