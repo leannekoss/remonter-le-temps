@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { sourceRect, zoomAt, panBy, formatLargeur } from './lib/view.js'
+import { sourceRect, zoomAt, panBy, formatLargeur, MIN_WIDTH_M, MAX_WIDTH_M } from './lib/view.js'
 
 const HOLD = 1100   // ms d'affichage plein d'un millesime
 const FADE = 700    // ms de fondu vers le suivant
@@ -38,6 +38,9 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
   const viewRef = useRef(view)
   const pointersRef = useRef(new Map())
   const pinchRef = useRef(null)
+  // Lu par la boucle de dessin pour incruster l'année dans le canvas pendant la capture.
+  // Une ref, pas l'état : la boucle ne doit pas se reconstruire quand il change.
+  const enregRef = useRef(false)
   const sobre = useMemo(reduceMotion, [])
   const [playing, setPlaying] = useState(!sobre)
   const [index, setIndex] = useState(0)
@@ -98,6 +101,26 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
         ctx.globalAlpha = alpha
         ctx.drawImage(epochs[next].bitmap, sx, sy, sw, sh, 0, 0, CANVAS_W, canvasH)
         ctx.globalAlpha = 1
+      }
+      // ⚠️ L'année s'affiche à l'écran dans un <span> HTML posé PAR-DESSUS le canvas.
+      // MediaRecorder capture le flux du canvas et ne voit rien du HTML : la vidéo
+      // exportée sortait donc sans aucune date, alors que c'est tout son intérêt.
+      // On la peint donc dans le canvas, mais UNIQUEMENT pendant l'enregistrement -
+      // sinon elle ferait doublon avec le <span> à l'écran.
+      if (enregRef.current) {
+        const marge = Math.round(CANVAS_W * 0.033)
+        const taille = Math.round(CANVAS_W * 0.093)
+        ctx.save()
+        ctx.font = `600 ${taille}px Archivo, system-ui, sans-serif`
+        ctx.textBaseline = 'alphabetic'
+        // Ombre portée plutôt qu'un bandeau : le texte reste lisible sur une dalle
+        // claire comme sur une forêt sombre, sans masquer l'image.
+        ctx.shadowColor = 'rgba(0,0,0,0.65)'
+        ctx.shadowBlur = Math.round(taille * 0.35)
+        ctx.shadowOffsetY = 2
+        ctx.fillStyle = '#ffffff'
+        ctx.fillText(epochs[i].label, marge, canvasH - marge)
+        ctx.restore()
       }
     }
 
@@ -202,6 +225,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
     if (video) URL.revokeObjectURL(video.url)
     setVideo(null)
     const duree = total * cycle + 200
+    enregRef.current = true          // incruste l'année dans le canvas dès la 1re image
     setEnreg({ debut: performance.now(), duree })
     onRecordingChange?.(true)
     const chunks = []
@@ -218,6 +242,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
         poids: Math.round(blob.size / 1048576 * 10) / 10,
         file: new File([blob], nom, { type }),
       })
+      enregRef.current = false
       setEnreg(null)
       onRecordingChange?.(false)
     }
@@ -265,21 +290,30 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
             sur l'image, là où l'oeil est - et une alternative cliquable au pincement,
             que tout le monde ne peut pas faire. */}
         <div className="absolute top-3 right-3 flex flex-col gap-1.5">
+          {/* Les deux boutons se désactivent aux bornes. Avant, à 8 km, le − restait
+              cliquable et ne faisait plus rien : un bouton mort qui laisse croire que
+              le site a planté, alors qu'on est simplement au bout de la plage utile. */}
           <button
             type="button"
             onClick={() => zoomCentre(1 / 1.6)}
+            disabled={view.widthM <= MIN_WIDTH_M}
             aria-label="Zoomer, voir plus serré"
-            title="Zoomer, voir plus serré"
-            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+            title={view.widthM <= MIN_WIDTH_M
+              ? `Zoom maximal atteint (${formatLargeur(MIN_WIDTH_M)})`
+              : 'Zoomer, voir plus serré'}
+            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-black/55"
           >
             +
           </button>
           <button
             type="button"
             onClick={() => zoomCentre(1.6)}
+            disabled={view.widthM >= MAX_WIDTH_M}
             aria-label="Dézoomer, voir plus large"
-            title="Dézoomer, voir plus large — les cartes anciennes apparaissent à partir de 700 m"
-            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80"
+            title={view.widthM >= MAX_WIDTH_M
+              ? `Vue la plus large (${formatLargeur(MAX_WIDTH_M)}) : au-delà, les cartes anciennes ne sont plus lisibles`
+              : 'Dézoomer, voir plus large — les cartes anciennes apparaissent à partir de 700 m'}
+            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-black/55"
           >
             −
           </button>
