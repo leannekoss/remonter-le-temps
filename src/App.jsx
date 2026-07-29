@@ -492,6 +492,26 @@ export default function App() {
           L'IGN photographie la France par rotation : tous les départements ne sont pas
           survolés chaque année, le nombre de millésimes varie donc selon les endroits.
         </p>
+        {/* Mention d'indépendance. L'IGN publie depuis 2016 un service qui porte le même
+            nom que ce site : sans cette précision, un visiteur peut croire qu'il est ici
+            sur un site officiel. Le renvoi est aussi utile - leur outil fait des choses
+            que celui-ci ne fait pas (télécharger les clichés d'origine, commander un tirage). */}
+        <p className="mt-2">
+          Ce site est un projet personnel, <strong className="font-semibold">sans aucun lien
+          avec l'IGN</strong>, qui en est seulement la source de données. L'IGN publie son
+          propre outil de consultation,{' '}
+          <a
+            href="https://remonterletemps.ign.fr/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline decoration-[var(--color-filet)] underline-offset-2 transition-colors hover:text-[var(--color-vermillon)]"
+          >
+            remonterletemps.ign.fr
+          </a>
+          {' '}: il compare deux dates côte à côte, permet de télécharger les clichés d'origine
+          et d'en commander des tirages. Ici, les millésimes s'enchaînent en une animation dont
+          vous pouvez tirer une vidéo.
+        </p>
         <p className="mt-2">
           Ce site ne stocke rien, n'a pas de serveur et ne charge aucun script tiers : tout
           le traitement se fait dans votre navigateur. Il interroge en revanche deux services

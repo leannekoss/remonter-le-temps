@@ -332,24 +332,33 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
             <div className="flex items-baseline justify-between gap-3 text-sm">
               <span>Enregistrement de la vidéo</span>
               <span className="tabular-nums text-[var(--color-attenue)]">
-                {restant} s
+                encore {restant} s
               </span>
             </div>
+            {/* La piste etait peinte en --color-encre, c'est-a-dire exactement la couleur
+                du fond de page : invisible. Sur 4 px de haut, il ne restait qu'un mince
+                trait vermillon, et le message portait seul toute l'information. */}
             <div
-              className="h-1 w-full overflow-hidden rounded-full bg-[var(--color-encre)]"
+              className="h-2 w-full overflow-hidden rounded-full bg-[var(--color-filet)]"
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
               aria-valuenow={Math.round(part * 100)}
+              aria-valuetext={`${Math.round(part * 100)} %, encore ${restant} secondes`}
               aria-label="Enregistrement de la vidéo"
             >
               <div
-                className="h-full rounded-full bg-[var(--color-vermillon)]"
-                style={{ width: `${Math.max(2, part * 100)}%` }}
+                className="h-full rounded-full bg-[var(--color-vermillon)] transition-[width] duration-200"
+                style={{ width: `${Math.max(3, part * 100)}%` }}
               />
             </div>
+            {/* L'ancien message disait « l'animation doit aller au bout : laissez cet onglet
+                au premier plan ». Il exprimait une contrainte technique du point de vue du
+                systeme, et « onglet au premier plan » ne veut rien dire sur un telephone.
+                On dit maintenant le mecanisme et la consequence. */}
             <p className="text-xs text-[var(--color-attenue)]">
-              L'animation doit aller au bout : laissez cet onglet au premier plan.
+              La vidéo se filme en direct, pendant que l'animation défile. Restez sur cette
+              page : si vous la quittez, l'enregistrement s'arrêtera là.
             </p>
           </div>
         )
