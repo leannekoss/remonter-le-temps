@@ -103,13 +103,13 @@ export function niveauPour(lat, widthM, pxAffiches, { zmin, zmax }) {
 
 // Une tuile. Le 404 n'est PAS une panne : c'est le WMTS qui dit proprement « aucune
 // donnée ici pour ce millésime ». C'est exactement ce que le WMS ne savait pas faire.
-async function tuile(couche, z, col, row) {
+async function tuile(couche, z, col, row, signal) {
   const q = new URLSearchParams({
     SERVICE: 'WMTS', VERSION: '1.0.0', REQUEST: 'GetTile',
     LAYER: couche.id, STYLE: couche.style, FORMAT: couche.format,
     TILEMATRIXSET: 'PM', TILEMATRIX: String(z), TILEROW: String(row), TILECOL: String(col),
   })
-  const r = await fetch(`${WMTS}?${q}`)
+  const r = await fetch(`${WMTS}?${q}`, { signal })
   if (r.status === 404) return null                       // pas de couverture, cas normal
   if (!r.ok) throw new Error(`HTTP ${r.status}`)
   const type = r.headers.get('content-type') || ''
@@ -121,7 +121,7 @@ const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart
 
 // Charge un millésime : assemble les tuiles qui couvrent l'emprise, puis recadre au
 // pixel près. Renvoie null quand aucune tuile n'existe (le millésime ne couvre pas).
-export async function loadEpoch(couche, bbox, pxW, pxH) {
+export async function loadEpoch(couche, bbox, pxW, pxH, signal) {
   const [lat1, lon1, lat2, lon2] = bbox
   const latC = (lat1 + lat2) / 2
   const widthM = (lon2 - lon1) * M_PER_DEG * Math.cos(rad(latC))
@@ -158,7 +158,9 @@ export async function loadEpoch(couche, bbox, pxW, pxH) {
   // ⚠️ Le niveau compte : sonder plus bas ferait repondre 200 des qu'un bout du
   // voisinage est couvert (une tuile de niveau 13 couvre 3,3 km), et le millesime
   // s'afficherait vide.
-  const centre = await tuile(couche, z, Math.floor((col0 + col1) / 2), Math.floor((row0 + row1) / 2))
+  const centreCol = Math.floor((col0 + col1) / 2)
+  const centreRow = Math.floor((row0 + row1) / 2)
+  const centre = await tuile(couche, z, centreCol, centreRow, signal)
   if (!centre) return null
 
   const grille = new OffscreenCanvas(cols * TUILE, rows * TUILE)
@@ -170,7 +172,11 @@ export async function loadEpoch(couche, bbox, pxW, pxH) {
   const octets = []
   let posees = 0
   await Promise.all(morceaux.map(async ([c, r]) => {
-    const blob = await tuile(couche, z, c, r)
+    // La sonde centrale fait partie de la mosaïque : réutiliser sa réponse garde le
+    // plafond réel à MAX_TUILES au lieu de télécharger cette tuile une seconde fois.
+    const blob = c === centreCol && r === centreRow
+      ? centre
+      : await tuile(couche, z, c, r, signal)
     if (!blob) return
     const buf = await blob.arrayBuffer()
     const bmp = await createImageBitmap(new Blob([buf], { type: couche.format }))
@@ -207,7 +213,18 @@ export async function loadEpoch(couche, bbox, pxW, pxH) {
 // buffer = { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } : l'emprise réellement
 // téléchargée, plus large que ce qui sera affiché, pour que zoom et déplacement
 // restent hors réseau.
-export async function loadAllEpochs(buffer, onProgress, onEpoch) {
+export function closeEpochs(epochs, keep = []) {
+  const gardes = new Set(keep.map((epoch) => epoch?.bitmap).filter(Boolean))
+  const fermes = new Set()
+  for (const epoch of epochs ?? []) {
+    const bitmap = epoch?.bitmap
+    if (!bitmap || gardes.has(bitmap) || fermes.has(bitmap)) continue
+    bitmap.close?.()
+    fermes.add(bitmap)
+  }
+}
+
+export async function loadAllEpochs(buffer, onProgress, onEpoch, signal) {
   const { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } = buffer
   const bbox = bboxAround(lat, lon, widthM, aspect)
 
@@ -217,38 +234,58 @@ export async function loadAllEpochs(buffer, onProgress, onEpoch) {
 
   const todo = [...lisibles, ...LAYERS]
   const seen = new Set()
+  const acquis = []
+  const transmis = []
   let done = 0
   let trouvees = 0
-  const results = await Promise.all(
-    todo.map(async (couche) => {
-      let trouve = null
-      try {
-        const epoch = await loadEpoch(couche, bbox, pxW, pxH)
-        if (epoch && seen.has(epoch.hash)) { epoch.bitmap.close?.(); return null }
-        if (epoch) {
-          seen.add(epoch.hash)
-          trouvees++
-          trouve = couche.label
-          onEpoch?.({ ...epoch, year: couche.annee })
+  try {
+    const results = await Promise.all(
+      todo.map(async (couche) => {
+        let trouve = null
+        try {
+          const epoch = await loadEpoch(couche, bbox, pxW, pxH, signal)
+          if (signal?.aborted) {
+            epoch?.bitmap.close?.()
+            signal.throwIfAborted()
+          }
+          if (epoch && seen.has(epoch.hash)) { epoch.bitmap.close?.(); return null }
+          if (epoch) {
+            seen.add(epoch.hash)
+            trouvees++
+            trouve = couche.label
+            const complet = { ...epoch, year: couche.annee }
+            acquis.push(complet)
+            if (onEpoch) {
+              transmis.push(complet)
+              onEpoch(complet)
+            }
+            return complet
+          }
+          return null
+        } catch (error) {
+          if (error?.name === 'AbortError') throw error
+          // Échouer visible plutôt que faire disparaître une décennie en silence.
+          return { year: couche.annee, label: couche.label, error: true }
+        } finally {
+          // `done` = couches interrogées (l'avancement), `trouvees` = vues réellement
+          // récupérées. Les confondre afficherait un compte faux : la plupart des
+          // millésimes ne couvrent pas un point donné.
+          onProgress?.(++done, todo.length, trouvees, trouve)
         }
-        return epoch ? { ...epoch, year: couche.annee } : null
-      } catch {
-        // Échouer visible plutôt que faire disparaître une décennie en silence.
-        return { year: couche.annee, label: couche.label, error: true }
-      } finally {
-        // `done` = couches interrogées (l'avancement), `trouvees` = vues réellement
-        // récupérées. Les confondre afficherait un compte faux : la plupart des
-        // millésimes ne couvrent pas un point donné.
-        onProgress?.(++done, todo.length, trouvees, trouve)
-      }
-    }),
-  )
+      }),
+    )
 
-  const epochs = []
-  const failed = []
-  for (const r of results.filter(Boolean).sort((a, b) => a.year - b.year)) {
-    if (r.error) { failed.push(r.label); continue }
-    epochs.push(r)
+    const epochs = []
+    const failed = []
+    for (const r of results.filter(Boolean).sort((a, b) => a.year - b.year)) {
+      if (r.error) { failed.push(r.label); continue }
+      epochs.push(r)
+    }
+    return { epochs, failed, tropSerrees }
+  } catch (error) {
+    // Les vues déjà remises à l'interface lui appartiennent ; les autres seraient
+    // orphelines si une nouvelle recherche interrompait celle-ci.
+    closeEpochs(acquis, transmis)
+    throw error
   }
-  return { epochs, failed, tropSerrees }
 }

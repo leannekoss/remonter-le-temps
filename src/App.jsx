@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Player from './Player.jsx'
 import Chargement from './Chargement.jsx'
-import { loadAllEpochs } from './lib/ign.js'
+import { closeEpochs, loadAllEpochs } from './lib/ign.js'
 import { suggest, reverse, parseCoords, isApproximate, widthForType } from './lib/geocode.js'
 import { bufferFor, needsRefetch, clampWidth, formatLargeur } from './lib/view.js'
 
@@ -37,7 +37,6 @@ export default function App() {
   const [progress, setProgress] = useState(null)
   const [refining, setRefining] = useState(false)
   const [error, setError] = useState('')
-  const [recording, setRecording] = useState(false)
   const [shared, setShared] = useState(false)
   const [localisation, setLocalisation] = useState(null)   // null | 'en cours' | précision en m
   const [vw, setVw] = useState(() => (typeof window === 'undefined' ? 1024 : window.innerWidth))
@@ -45,6 +44,17 @@ export default function App() {
   const vueRef = useRef(null)
   const dejaDefile = useRef(false)
   const runRef = useRef(0)
+  const abortRef = useRef(null)
+  const dataRef = useRef(null)
+
+  // Un ImageBitmap occupe plusieurs mégaoctets hors du tas JavaScript. Chaque
+  // remplacement libère ceux que la nouvelle vue ne réutilise pas.
+  const replaceData = useCallback((next) => {
+    const previous = dataRef.current
+    closeEpochs(previous?.epochs, next?.epochs)
+    dataRef.current = next
+    setData(next)
+  }, [])
 
   // La rotation du téléphone change le format de la vue, donc le tampon a retelecharger.
   useEffect(() => {
@@ -59,14 +69,23 @@ export default function App() {
   // et recouvre l'image des l'arrivee.
   useEffect(() => {
     if (!typing || parseCoords(query)) { setOptions([]); return }
-    const t = setTimeout(() => {
-      suggest(query).then(setOptions).catch(() => setOptions([]))
+    const controller = new AbortController()
+    const t = setTimeout(async () => {
+      try {
+        const next = await suggest(query, controller.signal)
+        if (!controller.signal.aborted) setOptions(next)
+      } catch {
+        if (!controller.signal.aborted) setOptions([])
+      }
     }, 220)
-    return () => clearTimeout(t)
+    return () => { clearTimeout(t); controller.abort() }
   }, [query, typing])
 
   const load = useCallback(async (target, keepVisible, viewportWidth) => {
     const run = ++runRef.current
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
     const buffer = bufferFor(target, viewportWidth)
     setError('')
     if (keepVisible) setRefining(true)
@@ -85,30 +104,50 @@ export default function App() {
         keepVisible
           ? undefined
           : (epoch) => {
-              if (run !== runRef.current) return
-              setData((d) => {
-                const cle = `${buffer.lat},${buffer.lon},${buffer.viewWidthM}`
-                const base = d && d.cle === cle ? d.epochs : []
-                const epochs = [...base, epoch].sort((a, b) => a.year - b.year)
-                return { cle, epochs, buffer, failed: d?.failed ?? [], tropSerrees: d?.tropSerrees ?? [] }
+              if (run !== runRef.current) { closeEpochs([epoch]); return }
+              const d = dataRef.current
+              const cle = `${buffer.lat},${buffer.lon},${buffer.viewWidthM}`
+              const base = d && d.cle === cle ? d.epochs : []
+              const epochs = [...base, epoch].sort((a, b) => a.year - b.year)
+              replaceData({
+                cle, epochs, buffer,
+                failed: d?.failed ?? [], tropSerrees: d?.tropSerrees ?? [],
               })
             },
+        controller.signal,
       )
-      if (run !== runRef.current) return          // une demande plus recente a pris la main
-      if (res.epochs.length === 0) {
-        setError("Aucune photo aérienne ne couvre ce point. L'IGN couvre la France et ses outre-mer.")
-        if (!keepVisible) setData(null)
+      if (run !== runRef.current) {
+        // Une demande plus récente a pris la main. Les bitmaps qui ne sont pas encore
+        // affichés n'ont plus de propriétaire et doivent être fermés ici.
+        closeEpochs(res.epochs, dataRef.current?.epochs)
         return
       }
-      setData({
+      if (res.epochs.length === 0) {
+        setError(res.failed.length > 0
+          ? "Le service de l'IGN ne répond pas. Réessayez dans un instant."
+          : "Aucune photo aérienne ne couvre ce point. L'IGN couvre la France et ses outre-mer.")
+        if (!keepVisible) replaceData(null)
+        return
+      }
+      replaceData({
         cle: `${buffer.lat},${buffer.lon},${buffer.viewWidthM}`,
         epochs: res.epochs, buffer, failed: res.failed, tropSerrees: res.tropSerrees,
       })
-    } catch {
-      if (run === runRef.current) setError("Le service de l'IGN ne répond pas. Réessayez dans un instant.")
+    } catch (err) {
+      if (run === runRef.current && err?.name !== 'AbortError') {
+        setError("Le service de l'IGN ne répond pas. Réessayez dans un instant.")
+      }
     } finally {
+      if (abortRef.current === controller) abortRef.current = null
       if (run === runRef.current) { setProgress(null); setRefining(false) }
     }
+  }, [replaceData])
+
+  useEffect(() => () => {
+    ++runRef.current
+    abortRef.current?.abort()
+    closeEpochs(dataRef.current?.epochs)
+    dataRef.current = null
   }, [])
 
   // Un geste ne déclenche un telechargement que s'il sort du tampon, reclame plus de
@@ -431,7 +470,6 @@ export default function App() {
             cle={data.cle}
             view={view}
             onViewChange={setView}
-            onRecordingChange={setRecording}
           />
 
           <div className="flex flex-wrap items-center gap-3">

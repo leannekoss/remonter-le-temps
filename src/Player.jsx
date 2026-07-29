@@ -31,13 +31,15 @@ function pickMime() {
   return candidats.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? ''
 }
 
-export default function Player({ epochs, buffer, view, cle, onViewChange, onRecordingChange }) {
+export default function Player({ epochs, buffer, view, cle, onViewChange }) {
   const canvasRef = useRef(null)
   const rafRef = useRef(0)
   const indexRef = useRef(0)
   const viewRef = useRef(view)
   const pointersRef = useRef(new Map())
   const pinchRef = useRef(null)
+  const recordingRef = useRef(null)
+  const videoRef = useRef(null)
   // Lu par la boucle de dessin pour incruster l'année dans le canvas pendant la capture.
   // Une ref, pas l'état : la boucle ne doit pas se reconstruire quand il change.
   const enregRef = useRef(false)
@@ -60,14 +62,43 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
   // ferait redemarrer l'effet a chaque cran de molette.
   viewRef.current = view
 
+  const clearVideo = (updateState = true) => {
+    if (videoRef.current) URL.revokeObjectURL(videoRef.current.url)
+    videoRef.current = null
+    if (updateState) setVideo(null)
+  }
+
+  const stopRecording = (updateState = true) => {
+    const active = recordingRef.current
+    if (!active) return
+    active.cancelled = true
+    clearTimeout(active.timer)
+    recordingRef.current = null
+    enregRef.current = false
+    try {
+      if (active.recorder.state !== 'inactive') active.recorder.stop()
+    } catch { /* l'enregistrement est déjà arrêté */ }
+    active.stream.getTracks().forEach((track) => track.stop())
+    if (updateState) setEnreg(null)
+  }
+
   // Un nouveau lieu peut avoir moins de millésimes que le précédent : sans remise à
   // zéro, la boucle lirait un index qui n'existe plus. On se cale sur le LIEU et non
   // sur le tableau : celui-ci s'enrichit pendant le chargement progressif, et repartir
   // de zéro à chaque vue reçue ferait bégayer l'animation.
   useEffect(() => {
+    stopRecording()
+    clearVideo()
     indexRef.current = 0
     setIndex(0)
   }, [cle])
+
+  // Le composant peut disparaître pendant une capture ou après un export. Les pistes
+  // MediaStream, le timer et l'Object URL ne doivent pas survivre au lecteur.
+  useEffect(() => () => {
+    stopRecording(false)
+    clearVideo(false)
+  }, [])
 
   // L'enregistrement dure exactement total * cycle : la barre est donc determinee,
   // pas une animation decorative. On rafraichit 10 fois par seconde, ce qui suffit a
@@ -218,37 +249,61 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
   // partager. Declencher le partage direct ferait perdre le fichier a qui annule la
   // feuille native, et priverait le bureau du telechargement.
   const exporter = () => {
+    if (recordingRef.current) return
     const canvas = canvasRef.current
     if (!canvas?.captureStream) return
     const type = pickMime()
     if (!type) return
-    if (video) URL.revokeObjectURL(video.url)
-    setVideo(null)
+    clearVideo()
     const duree = total * cycle + 200
+    const chunks = []
+    const stream = canvas.captureStream(30)
+    let rec
+    try {
+      rec = new MediaRecorder(stream, { mimeType: type })
+    } catch {
+      stream.getTracks().forEach((track) => track.stop())
+      return
+    }
+    const active = { recorder: rec, stream, timer: 0, cancelled: false }
+    recordingRef.current = active
     enregRef.current = true          // incruste l'année dans le canvas dès la 1re image
     setEnreg({ debut: performance.now(), duree })
-    onRecordingChange?.(true)
-    const chunks = []
-    const rec = new MediaRecorder(canvas.captureStream(30), { mimeType: type })
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
     rec.onstop = () => {
+      clearTimeout(active.timer)
+      stream.getTracks().forEach((track) => track.stop())
+      if (recordingRef.current === active) recordingRef.current = null
+      if (active.cancelled) return
       const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm'
       const blob = new Blob(chunks, { type })
       const nom = `remonter-le-temps.${ext}`
-      setVideo({
+      const nextVideo = {
         url: URL.createObjectURL(blob),
         nom,
         ext,
         poids: Math.round(blob.size / 1048576 * 10) / 10,
         file: new File([blob], nom, { type }),
-      })
+      }
+      videoRef.current = nextVideo
+      setVideo(nextVideo)
       enregRef.current = false
       setEnreg(null)
-      onRecordingChange?.(false)
+    }
+    try {
+      rec.start()
+    } catch {
+      active.cancelled = true
+      recordingRef.current = null
+      enregRef.current = false
+      stream.getTracks().forEach((track) => track.stop())
+      setEnreg(null)
+      return
     }
     setPlaying(true)
-    rec.start()
-    setTimeout(() => rec.stop(), duree)
+    active.timer = setTimeout(() => {
+      if (rec.state !== 'inactive') rec.stop()
+    }, duree)
   }
 
   const partagerVideo = async () => {
@@ -365,9 +420,11 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
         {videoPossible ? (
           <button
             onClick={exporter}
-            className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
+            disabled={!!enreg}
+            aria-label={enreg ? 'Création de la vidéo en cours' : 'Créer la vidéo'}
+            className="tap h-11 shrink-0 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)] disabled:cursor-not-allowed disabled:opacity-45"
           >
-            Créer la vidéo
+            {enreg ? 'Création…' : 'Créer la vidéo'}
           </button>
         ) : (
           <span className="shrink-0 text-xs text-[var(--color-attenue)]">
