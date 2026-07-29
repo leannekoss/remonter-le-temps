@@ -3,7 +3,7 @@ import Player from './Player.jsx'
 import Chargement from './Chargement.jsx'
 import { loadAllEpochs } from './lib/ign.js'
 import { suggest, reverse, parseCoords, isApproximate, widthForType } from './lib/geocode.js'
-import { bufferFor, needsRefetch, clampWidth } from './lib/view.js'
+import { bufferFor, needsRefetch, clampWidth, formatLargeur } from './lib/view.js'
 
 const WIDTHS = [150, 300, 800, 2000]
 
@@ -332,22 +332,35 @@ export default function App() {
         {/* Les largeurs ne pilotent rien tant qu'aucun lieu n'est choisi : les montrer
             avant, c'est offrir un bouton mort. */}
         {view && (
-        <div className="flex flex-wrap items-center gap-1">
-          {WIDTHS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              onClick={() => view && setView({ ...view, widthM: w })}
-              aria-pressed={!!view && Math.round(view.widthM) === w}
-              className={`tap h-11 rounded-lg px-3 text-sm tabular-nums transition-colors ${
-                view && Math.round(view.widthM) === w
-                  ? 'bg-[var(--color-vermillon)] font-medium text-[var(--color-encre)]'
-                  : 'text-[var(--color-attenue)] hover:text-[var(--color-craie)]'
-              }`}
-            >
-              {w >= 1000 ? `${w / 1000} km` : `${w} m`}
-            </button>
-          ))}
+        <div className="flex flex-col gap-1.5">
+          {/* Deux défauts que ce libellé corrige d'un coup.
+              1. « 150 m · 300 m · 800 m · 2 km » ne disait pas de quoi il s'agissait -
+                 une distance ? un rayon ? l'altitude de prise de vue ?
+              2. Après un zoom à la molette ou au pincement, la largeur devient une valeur
+                 libre (437 m) et AUCUN bouton n'est plus allumé : quatre boutons éteints,
+                 sans explication. Le libellé continue d'annoncer où l'on en est, et il
+                 change quand on zoome avec + et − : on comprend que c'est la même commande. */}
+          <span id="libelle-largeur" className="text-xs text-[var(--color-attenue)]">
+            Largeur de la vue : <span className="tabular-nums text-[var(--color-craie)]">{formatLargeur(view.widthM)}</span>
+          </span>
+          <div role="group" aria-labelledby="libelle-largeur" className="flex flex-wrap items-center gap-1">
+            {WIDTHS.map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => view && setView({ ...view, widthM: w })}
+                aria-pressed={!!view && Math.round(view.widthM) === w}
+                aria-label={`Voir une largeur de ${formatLargeur(w)}`}
+                className={`tap h-11 rounded-lg px-3 text-sm tabular-nums transition-colors ${
+                  view && Math.round(view.widthM) === w
+                    ? 'bg-[var(--color-vermillon)] font-medium text-[var(--color-encre)]'
+                    : 'text-[var(--color-attenue)] hover:text-[var(--color-craie)]'
+                }`}
+              >
+                {formatLargeur(w)}
+              </button>
+            ))}
+          </div>
         </div>
         )}
       </form>

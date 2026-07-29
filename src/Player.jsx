@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { sourceRect, zoomAt, panBy } from './lib/view.js'
+import { sourceRect, zoomAt, panBy, formatLargeur } from './lib/view.js'
 
 const HOLD = 1100   // ms d'affichage plein d'un millesime
 const FADE = 700    // ms de fondu vers le suivant
@@ -253,7 +253,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
           <button
             type="button"
             onClick={() => zoomCentre(1 / 1.6)}
-            aria-label="Zoomer"
+            aria-label="Zoomer, voir plus serré"
+            title="Zoomer, voir plus serré"
             className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80"
           >
             +
@@ -261,7 +262,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
           <button
             type="button"
             onClick={() => zoomCentre(1.6)}
-            aria-label="Dézoomer"
+            aria-label="Dézoomer, voir plus large"
+            title="Dézoomer, voir plus large — les cartes anciennes apparaissent à partir de 700 m"
             className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80"
           >
             −
@@ -276,7 +278,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
               {annee}
             </span>
             <span className="pb-1 text-xs tabular-nums text-white/70">
-              {Math.round(view.widthM)} m
+              {formatLargeur(view.widthM)}
             </span>
           </div>
         </div>

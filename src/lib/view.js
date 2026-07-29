@@ -21,6 +21,21 @@ export const MAX_WIDTH_M = 8000   // assez large pour que Cassini (1:86400) soit
 
 export const clampWidth = (m) => Math.min(MAX_WIDTH_M, Math.max(MIN_WIDTH_M, m))
 
+// Le zoom libre (molette, pincement) produit des largeurs quelconques : 437 m, 1 240 m.
+// On les affiche arrondies, en mètres sous le kilomètre et en kilomètres au-dessus,
+// avec la virgule décimale française.
+//
+// Cette fonction vit ici parce que DEUX endroits l'utilisent : le libellé du choix de
+// largeur dans le formulaire, et l'échelle affichée sur l'image. Les laisser diverger
+// donnerait « 2 km » d'un côté et « 2000 m » de l'autre pour la même vue.
+export function formatLargeur(m) {
+  if (m >= 1000) {
+    const km = m / 1000
+    return `${(km >= 10 ? Math.round(km) : Math.round(km * 10) / 10).toString().replace('.', ',')} km`
+  }
+  return `${Math.round(m)} m`
+}
+
 const mPerDegLon = (lat) => M_PER_DEG * Math.cos((lat * Math.PI) / 180)
 
 // hauteur / largeur de la fenêtre affichée
