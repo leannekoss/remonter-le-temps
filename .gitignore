@@ -10,3 +10,6 @@ dist
 
 # Sorties de QA (videos, captures) - le depot est public
 .qa/
+
+# Traces de la passe QA playwright-cli (logs console, snapshots de page)
+.playwright-cli/

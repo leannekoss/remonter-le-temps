@@ -190,7 +190,7 @@ playwright-cli --raw eval "JSON.stringify({overflow: document.documentElement.sc
 |---|---|
 | Rennes (`?lat=48.1173&lon=-1.6778&w=2000`) | **12 millésimes** |
 | Hanvec (`?lat=48.3419&lon=-4.1461&w=2000`) | **10** |
-| Parcelle de référence (`?lat=44.56605&lon=0.73237&w=300`) | **8** |
+| Viaduc de Millau (`?lat=44.0794&lon=3.0225&w=2000`) | **11 millésimes** |
 | Lille en 390 px (`?lat=50.6292&lon=3.0573&w=2000`) | **9** |
 | Erreurs HTTP hors 404 | **0** |
 | Requêtes vers `data.geopf.fr` | ~292 bureau / ~371 mobile |
@@ -249,7 +249,7 @@ Captures : `p1-01-accueil.png`, `p1-02-exemple-charge.png`.
 3. Recommencer en **validant avec Entrée sans attendre les suggestions** : la recherche doit
    se faire quand même et signaler son échec le cas échéant. Une soumission muette est un bug
    **majeur** (défaut corrigé le 28/07).
-4. Coller des **coordonnées** au format `44.56605, 0.73237` : doit fonctionner.
+4. Coller des **coordonnées** au format `44.0794, 3.0225` : doit fonctionner.
 5. ⚠️ **Ouvrir un lien partagé (`?lat=…&lon=…&w=…`) ne doit PAS faire apparaître la liste de
    suggestions par-dessus l'image.** Bug corrigé le 28/07, à vérifier.
 6. Sur téléphone, après chargement, la page doit **défiler jusqu'à l'image** (le résultat se

@@ -29,7 +29,9 @@ export async function reverse(lat, lon) {
   return features[0]?.properties.label ?? null
 }
 
-// "44.56605, 0.73237" colle depuis Google Maps (clic droit > copier les coordonnées).
+// "44.07940, 3.02250" colle depuis Google Maps (clic droit > copier les coordonnées).
+// Exemple pris sur un lieu public - le viaduc de Millau : ce dépôt est public, et des
+// coordonnées à cinq décimales désignent une maison au mètre près.
 export function parseCoords(text) {
   const m = text.trim().match(/^(-?\d{1,3}[.,]\d+)[,;\s]+(-?\d{1,3}[.,]\d+)$/)
   if (!m) return null
