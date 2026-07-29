@@ -5,10 +5,10 @@
 
 const BAN = 'https://api-adresse.data.gouv.fr'
 
-export async function suggest(query) {
+export async function suggest(query, signal) {
   if (query.trim().length < 3) return []
   const q = new URLSearchParams({ q: query, limit: '5', autocomplete: '1' })
-  const r = await fetch(`${BAN}/search/?${q}`)
+  const r = await fetch(`${BAN}/search/?${q}`, { signal })
   if (!r.ok) throw new Error('Geocodage indisponible')
   const { features } = await r.json()
   return features.map((f) => ({

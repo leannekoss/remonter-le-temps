@@ -113,13 +113,19 @@ export function geoAt(view, canvasW, canvasH, cx, cy) {
 export function zoomAt(view, factor, canvasW, canvasH, cx, cy) {
   const anchor = geoAt(view, canvasW, canvasH, cx, cy)
   const widthM = clampWidth(view.widthM * factor)
+  // Une fois la borne atteinte, le zoom doit être une identité stricte. Recalculer le
+  // centre malgré une largeur inchangée accumule sinon une dérive à chaque événement.
+  if (widthM === view.widthM) return view
   const mPerPx = widthM / canvasW
   const dxM = (cx - canvasW / 2) * mPerPx
   const dyM = -(cy - canvasH / 2) * mPerPx
+  const lat = anchor.lat - dyM / M_PER_DEG
   return {
     widthM,
-    lat: anchor.lat - dyM / M_PER_DEG,
-    lon: anchor.lon - dxM / mPerDegLon(anchor.lat),
+    lat,
+    // La conversion inverse doit employer la latitude du nouveau centre, comme geoAt
+    // emploie celle du centre initial. La différence devient visible sur des zooms répétés.
+    lon: anchor.lon - dxM / mPerDegLon(lat),
   }
 }
 
