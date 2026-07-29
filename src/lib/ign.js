@@ -1,152 +1,218 @@
-// Accès aux orthophotos IGN (Géoplateforme, WMS sans clé, CORS ouvert).
-// Portage navigateur du script local ign_gps_timelapse.py : même liste de couches,
-// mêmes filtres (dalle vide au poids, dalle blanche no-data, doublon par hash).
-// La couche satellite Esri/Maxar du script n'est PAS reprise : imagerie non
-// redistribuable. Ici tout est sous Licence Ouverte Etalab (mention IGN obligatoire).
+// Accès aux orthophotos IGN (Géoplateforme, sans clé, CORS ouvert).
+//
+// ⚠️ Ce fichier interrogeait le WMS jusqu'au 29/07/2026. Il a été porté sur le WMTS
+// après une panne mesurée en production : le WMS répondait « LayerNotDefined » sur des
+// couches pourtant présentes au GetCapabilities, de façon erratique et sans jamais
+// guérir au bout de 5 tentatives. Rennes affichait 1 millésime sur 17 disponibles.
+//
+// Trois mesures ont tranché, le 29/07 :
+//   - en séquentiel, une requête à la fois : 6 échecs sur 8 -> ce n'est pas la charge
+//   - depuis un autre réseau (VPS, autre IP) : 3 échecs sur 6 -> ce n'est pas le client
+//   - le même appel répété 10 fois : 10/10 -> l'échec est erratique, pas structurel
+// Le WMTS, lui, sert des tuiles pré-calculées depuis un cache : réponses identiques
+// d'un passage à l'autre sur 4 lieux testés, zéro erreur, et 17/19 couches à Rennes.
+// Il est aussi la seule API de diffusion IGN sans limite de débit.
+//
+// Tout est sous Licence Ouverte Etalab (mention IGN obligatoire, cf. pied de page).
 
-const WMS = 'https://data.geopf.fr/wms-r/wms'
+const WMTS = 'https://data.geopf.fr/wmts'
+const TUILE = 256
 
-// (couche, format, année de tri, libelle affiche)
+// Chaque couche a SON style et SA plage de niveaux : lus dans le GetCapabilities WMTS,
+// pas devinés. Deux pièges qui feraient disparaître des millésimes en silence :
+//   - les campagnes historiques veulent le style BDORTHOHISTORIQUE, pas « normal »
+//     (« normal » y répond 400 « Style normal unknown »)
+//   - zmax varie : Cassini s'arrête à 14, l'état-major à 15, les orthophotos vont à 18-19.
+//     C'est l'IGN qui encode ainsi l'échelle de dessin de ses cartes anciennes.
+const O = (id, annee, label, extra = {}) =>
+  ({ id, style: 'normal', format: 'image/jpeg', zmin: 6, zmax: 18, annee, label, ...extra })
+
 export const LAYERS = [
-  ['ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 'png', 1957, '1950-1965'],
-  ['ORTHOIMAGERY.ORTHOPHOTOS.1965-1980', 'png', 1972, '1965-1980'],
-  ['ORTHOIMAGERY.ORTHOPHOTOS.1980-1995', 'png', 1987, '1980-1995'],
-  ['ORTHOIMAGERY.ORTHOPHOTOS2000-2005', 'jpeg', 2002, '2000-2005'],
-  ['ORTHOIMAGERY.ORTHOPHOTOS2006-2010', 'jpeg', 2008, '2006-2010'],
-  ['ORTHOIMAGERY.ORTHOPHOTOS2011-2015', 'jpeg', 2013, '2011-2015'],
-  ...Array.from({ length: 9 }, (_, i) => [
-    `ORTHOIMAGERY.ORTHOPHOTOS${2016 + i}`, 'jpeg', 2016 + i, String(2016 + i),
-  ]),
-  ['ORTHOIMAGERY.ORTHOPHOTOS.ORTHO-EXPRESS.2025', 'jpeg', 2025, '2025'],
-  ['ORTHOIMAGERY.ORTHOPHOTOS.RVB-EXPRESS.2026', 'jpeg', 2026, '2026'],
+  O('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 1957, '1950-1965', { style: 'BDORTHOHISTORIQUE', format: 'image/png', zmin: 0 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.1965-1980', 1972, '1965-1980', { style: 'BDORTHOHISTORIQUE', format: 'image/png', zmin: 3 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.1980-1995', 1987, '1980-1995', { style: 'BDORTHOHISTORIQUE', format: 'image/png', zmin: 3 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2000-2005', 2002, '2000-2005'),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2006-2010', 2008, '2006-2010'),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2011-2015', 2013, '2011-2015'),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2016', 2016, '2016', { zmin: 0 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2017', 2017, '2017', { zmin: 0 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2018', 2018, '2018', { zmin: 0 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2019', 2019, '2019'),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2020', 2020, '2020', { zmax: 19 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2021', 2021, '2021', { zmax: 19 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2022', 2022, '2022', { zmax: 19 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2023', 2023, '2023', { zmax: 19 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS2024', 2024, '2024', { zmax: 19 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.ORTHO-EXPRESS.2025', 2025, '2025', { zmin: 0, zmax: 19 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.RVB-EXPRESS.2026', 2026, '2026', { zmin: 0, zmax: 19 }),
 ]
 
 // Avant la photographie aérienne, il reste les cartes - numérisées et calées par l'IGN,
-// donc même service, même licence ouverte que les orthophotos.
+// donc même service et même licence ouverte que les orthophotos.
 //
-// Elles ont été dessinées a une échelle donnée : les afficher sur 200 m de large ne
-// montre que du grain. D'ou minWidthM, la largeur de vue en dessous de laquelle on ne
-// les propose pas. Mesure sur la parcelle de référence : l'état-major (1:40000) est
-// déjà lisible vers 700 m, Cassini (1:86400) demande environ 2 km.
+// Elles ont été dessinées à une échelle donnée : les afficher sur 200 m de large ne
+// montre que du grain. D'où minWidthM, la largeur de vue en dessous de laquelle on ne
+// les propose pas. Seuils validés à l'oeil le 28/07 sur la parcelle de référence.
 export const HISTORIC = [
-  ['AN-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI', 'jpeg', 1760, 'vers 1760 - Cassini', 2000],
-  ['GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 'jpeg', 1840, 'vers 1840 - état-major', 700],
+  O('AN-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI', 1760, 'vers 1760 - Cassini', { zmin: 0, zmax: 14, minWidthM: 2000 }),
+  O('GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 1840, 'vers 1840 - état-major', { zmax: 15, minWidthM: 700 }),
 ]
+
+const M_PER_DEG = 111320
+const rad = (d) => (d * Math.PI) / 180
 
 // Emprise centrée sur le point. `aspect` = hauteur / largeur : 2/3 en paysage sur
 // grand écran, 1.25 en portrait sur téléphone.
-// WMS 1.3.0 en EPSG:4326 attend la bbox en lat,lon - pas l'inverse.
 export function bboxAround(lat, lon, widthM, aspect = 2 / 3) {
-  const heightM = widthM * aspect
-  const dLat = heightM / 111320
-  const dLon = widthM / (111320 * Math.cos((lat * Math.PI) / 180))
-  return [lat - dLat / 2, lon - dLon / 2, lat + dLat / 2, lon + dLon / 2].join(',')
+  const dLat = (widthM * aspect) / M_PER_DEG
+  const dLon = widthM / (M_PER_DEG * Math.cos(rad(lat)))
+  return [lat - dLat / 2, lon - dLon / 2, lat + dLat / 2, lon + dLon / 2]
 }
 
-function url(layer, fmt, bbox, pxW, pxH) {
+// Position d'un point dans la grille de tuiles, en tuiles fractionnaires (Web Mercator).
+function enTuiles(lat, lon, z) {
+  const n = 2 ** z
+  const y = (1 - Math.log(Math.tan(rad(lat)) + 1 / Math.cos(rad(lat))) / Math.PI) / 2
+  return { x: ((lon + 180) / 360) * n, y: y * n }
+}
+
+// Mètres par pixel du niveau z, à cette latitude.
+const resolution = (lat, z) => (156543.033928 * Math.cos(rad(lat))) / 2 ** z
+
+// Le niveau à demander. On vise la résolution de l'AFFICHAGE, pas la résolution
+// maximale : le canvas fait 736 px de large sur bureau et 358 sur téléphone (mesuré),
+// alors demander du 20 cm sur une vue de 2 km multiplierait les tuiles par 16 sans
+// qu'un seul pixel de plus soit visible. On arrondit donc vers le bas, comme toute
+// carte web, puis on borne à la plage que la couche publie réellement.
+export function niveauPour(lat, widthM, pxAffiches, { zmin, zmax }) {
+  const voulue = widthM / Math.max(1, pxAffiches)
+  let z = zmax
+  while (z > zmin && resolution(lat, z) < voulue) z--
+  return Math.min(zmax, Math.max(zmin, z))
+}
+
+// Une tuile. Le 404 n'est PAS une panne : c'est le WMTS qui dit proprement « aucune
+// donnée ici pour ce millésime ». C'est exactement ce que le WMS ne savait pas faire.
+async function tuile(couche, z, col, row) {
   const q = new URLSearchParams({
-    SERVICE: 'WMS', VERSION: '1.3.0', REQUEST: 'GetMap',
-    LAYERS: layer, CRS: 'EPSG:4326', BBOX: bbox,
-    WIDTH: pxW, HEIGHT: pxH, FORMAT: `image/${fmt}`, STYLES: '',
+    SERVICE: 'WMTS', VERSION: '1.0.0', REQUEST: 'GetTile',
+    LAYER: couche.id, STYLE: couche.style, FORMAT: couche.format,
+    TILEMATRIXSET: 'PM', TILEMATRIX: String(z), TILEROW: String(row), TILECOL: String(col),
   })
-  return `${WMS}?${q}`
-}
-
-async function get(u, tries = 5) {
-  let last
-  for (let i = 0; i < tries; i++) {
-    try {
-      const r = await fetch(u)
-      if (r.status === 404 || r.status === 403) throw new Error(`HTTP ${r.status}`)
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      return await r.blob()
-    } catch (e) {
-      last = e
-      await new Promise((res) => setTimeout(res, 400 * (i + 1)))
-    }
-  }
-  throw last
+  const r = await fetch(`${WMTS}?${q}`)
+  if (r.status === 404) return null                       // pas de couverture, cas normal
+  if (!r.ok) throw new Error(`HTTP ${r.status}`)
+  const type = r.headers.get('content-type') || ''
+  if (!type.startsWith('image/')) throw new Error('réponse non image')
+  return r.blob()
 }
 
 const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')
 
-async function digest(blob) {
-  return hex(await crypto.subtle.digest('SHA-256', await blob.arrayBuffer()))
+// Charge un millésime : assemble les tuiles qui couvrent l'emprise, puis recadre au
+// pixel près. Renvoie null quand aucune tuile n'existe (le millésime ne couvre pas).
+export async function loadEpoch(couche, bbox, pxW, pxH) {
+  const [lat1, lon1, lat2, lon2] = bbox
+  const latC = (lat1 + lat2) / 2
+  const widthM = (lon2 - lon1) * M_PER_DEG * Math.cos(rad(latC))
+  const z = niveauPour(latC, widthM, pxW, couche)
+
+  const hg = enTuiles(lat2, lon1, z)   // haut-gauche : latitude haute, longitude basse
+  const bd = enTuiles(lat1, lon2, z)
+  const col0 = Math.floor(hg.x), col1 = Math.floor(bd.x)
+  const row0 = Math.floor(hg.y), row1 = Math.floor(bd.y)
+
+  const cols = col1 - col0 + 1
+  const rows = row1 - row0 + 1
+
+  // Sonde : une seule tuile, au centre, AU NIVEAU REELLEMENT AFFICHE. La plupart des
+  // millesimes ne couvrent pas un point donne ; sans cette sonde on telechargeait
+  // deux douzaines de tuiles par couche pour n'obtenir que des 404 - 168 requetes
+  // perdues sur 441 a Rennes.
+  // ⚠️ Le niveau compte : sonder plus bas ferait repondre 200 des qu'un bout du
+  // voisinage est couvert (une tuile de niveau 13 couvre 3,3 km), et le millesime
+  // s'afficherait vide.
+  const centre = await tuile(couche, z, Math.floor((col0 + col1) / 2), Math.floor((row0 + row1) / 2))
+  if (!centre) return null
+
+  const grille = new OffscreenCanvas(cols * TUILE, rows * TUILE)
+  const ctx = grille.getContext('2d')
+
+  const morceaux = []
+  for (let c = col0; c <= col1; c++) for (let r = row0; r <= row1; r++) morceaux.push([c, r])
+
+  const octets = []
+  let posees = 0
+  await Promise.all(morceaux.map(async ([c, r]) => {
+    const blob = await tuile(couche, z, c, r)
+    if (!blob) return
+    const buf = await blob.arrayBuffer()
+    const bmp = await createImageBitmap(new Blob([buf], { type: couche.format }))
+    ctx.drawImage(bmp, (c - col0) * TUILE, (r - row0) * TUILE)
+    bmp.close?.()
+    octets.push(buf.byteLength)
+    posees++
+  }))
+  if (!posees) return null
+
+  // Recadrage : la grille déborde de l'emprise d'une fraction de tuile de chaque côté.
+  const sx = (hg.x - col0) * TUILE
+  const sy = (hg.y - row0) * TUILE
+  const sw = (bd.x - hg.x) * TUILE
+  const sh = (bd.y - hg.y) * TUILE
+  const bitmap = await createImageBitmap(grille, sx, sy, Math.max(1, sw), Math.max(1, sh), {
+    resizeWidth: pxW, resizeHeight: pxH, resizeQuality: 'high',
+  })
+
+  // Empreinte pour écarter deux millésimes rigoureusement identiques (l'IGN republie
+  // parfois la même campagne sous deux noms). Le poids des tuiles suffit à les
+  // distinguer sans relire les pixels - mais l'identifiant de couche NE doit PAS y
+  // entrer, sinon deux couches ne se ressemblent jamais et la déduplication ne sert
+  // plus à rien.
+  const cle = `${z}|${octets.sort((a, b) => a - b).join(',')}`
+  const hash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(cle)))
+  return { label: couche.label, bitmap, hash, tuiles: posees, z }
 }
 
-// Une dalle "no-data" est blanche mais pèse plus que le seuil de poids : il faut
-// la décoder et regarder les pixels. Constaté en reel sur ORTHOPHOTOS2016 en rural.
-async function isBlank(bitmap) {
-  const w = 80
-  const h = Math.max(1, Math.round((bitmap.height / bitmap.width) * w))
-  const c = new OffscreenCanvas(w, h)
-  const ctx = c.getContext('2d', { willReadFrequently: true })
-  ctx.drawImage(bitmap, 0, 0, w, h)
-  const { data } = ctx.getImageData(0, 0, w, h)
-  let pale = 0
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i] >= 246 && data[i + 1] >= 246 && data[i + 2] >= 246) pale++
-  }
-  return pale / (w * h) > 0.9
-}
-
-// Charge un millésime. Renvoie null quand la couche ne couvre pas le point.
-export async function loadEpoch(layer, fmt, label, bbox, pxW, pxH) {
-  let blob = await get(url(layer, fmt, bbox, pxW, pxH))
-  // Les campagnes historiques sont en 4 bandes : le JPEG échoue en ServiceException XML.
-  if (blob.type.includes('xml') || blob.type.includes('text')) {
-    blob = await get(url(layer, 'png', bbox, pxW, pxH))
-  }
-  // Pas de filtre au poids : data.geopf.fr tronque parfois ses réponses sous charge,
-  // et une réponse tronquée est légère - elle passerait alors pour une absence de
-  // couverture, en silence. On decode toujours : un flux coupé fait échouer le décodage,
-  // l'erreur remonte et le millésime est affiche comme indisponible au lieu de
-  // disparaître. Constaté en production le 28/07 sur Cassini et l'état-major.
-  const bitmap = await createImageBitmap(blob)
-  if (await isBlank(bitmap)) { bitmap.close?.(); return null }
-  return { label, bitmap, hash: await digest(blob) }
-}
-
-// Charge tous les millésimes en parallèle. Le navigateur limite lui-même le nombre
-// de connexions simultanées : c'est ce qui fait passer le rendu de plusieurs minutes
-// (script séquentiel) a quelques secondes.
+// Charge tous les millésimes. `onEpoch` reçoit chaque vue dès son arrivée, déduplication
+// faite : c'est ce qui permet d'afficher quelque chose au bout d'une seconde au lieu
+// d'attendre les 19 couches.
 //
-// buffer = { lat, lon, widthM, pxW, pxH } : l'emprise réellement téléchargée, plus
-// large que ce qui sera affiche, pour que zoom et déplacement restent hors réseau.
-// `onEpoch` reçoit chaque vue dès qu'elle arrive, deduplication faite : c'est ce qui
-// permet d'afficher quelque chose au bout d'une seconde au lieu d'attendre les 19 couches.
+// buffer = { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } : l'emprise réellement
+// téléchargée, plus large que ce qui sera affiché, pour que zoom et déplacement
+// restent hors réseau.
 export async function loadAllEpochs(buffer, onProgress, onEpoch) {
   const { lat, lon, widthM, viewWidthM, aspect, pxW, pxH } = buffer
   const bbox = bboxAround(lat, lon, widthM, aspect)
 
-  const lisibles = HISTORIC.filter(([, , , , minW]) => viewWidthM >= minW)
-  const tropSerrees = HISTORIC.filter(([, , , , minW]) => viewWidthM < minW)
-    .map(([, , , label, minW]) => ({ label, minWidthM: minW }))
+  const lisibles = HISTORIC.filter((c) => viewWidthM >= c.minWidthM)
+  const tropSerrees = HISTORIC.filter((c) => viewWidthM < c.minWidthM)
+    .map((c) => ({ label: c.label, minWidthM: c.minWidthM }))
 
   const todo = [...lisibles, ...LAYERS]
   const seen = new Set()
   let done = 0
   let trouvees = 0
   const results = await Promise.all(
-    todo.map(async ([layer, fmt, year, label]) => {
+    todo.map(async (couche) => {
       let trouve = null
       try {
-        const epoch = await loadEpoch(layer, fmt, label, bbox, pxW, pxH)
+        const epoch = await loadEpoch(couche, bbox, pxW, pxH)
         if (epoch && seen.has(epoch.hash)) { epoch.bitmap.close?.(); return null }
         if (epoch) {
           seen.add(epoch.hash)
           trouvees++
-          trouve = label
-          onEpoch?.({ ...epoch, year })
+          trouve = couche.label
+          onEpoch?.({ ...epoch, year: couche.annee })
         }
-        return epoch ? { ...epoch, year } : null
+        return epoch ? { ...epoch, year: couche.annee } : null
       } catch {
         // Échouer visible plutôt que faire disparaître une décennie en silence.
-        return { year, label, error: true }
+        return { year: couche.annee, label: couche.label, error: true }
       } finally {
         // `done` = couches interrogées (l'avancement), `trouvees` = vues réellement
         // récupérées. Les confondre afficherait un compte faux : la plupart des
-        // millésimes ne couvrent pas un point donne.
+        // millésimes ne couvrent pas un point donné.
         onProgress?.(++done, todo.length, trouvees, trouve)
       }
     }),

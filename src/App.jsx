@@ -16,7 +16,6 @@ const EXEMPLES = [
   { label: "L'aéroport de Roissy", lat: 49.0097, lon: 2.5479, widthM: 2000, quoi: "des champs jusqu'en 1974" },
   { label: 'Le Mont-Saint-Michel', lat: 48.6361, lon: -1.5115, widthM: 800, quoi: 'la digue a disparu' },
 ]
-const CANVAS_W = 1200
 const SETTLE = 400   // ms d'immobilite avant de retelecharger apres un geste
 
 function readUrl() {
@@ -116,7 +115,7 @@ export default function App() {
   useEffect(() => {
     if (!view) return
     if (!data) { load(view, false, vw); return }
-    if (!needsRefetch(view, data.buffer, CANVAS_W, vw)) return
+    if (!needsRefetch(view, data.buffer, data.buffer.canvasW, vw)) return
     const t = setTimeout(() => load(view, true, vw), SETTLE)
     return () => clearTimeout(t)
   }, [view, data, vw, load])

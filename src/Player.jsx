@@ -3,7 +3,6 @@ import { sourceRect, zoomAt, panBy } from './lib/view.js'
 
 const HOLD = 1100   // ms d'affichage plein d'un millesime
 const FADE = 700    // ms de fondu vers le suivant
-const CANVAS_W = 1200
 
 const reduceMotion = () =>
   typeof window !== 'undefined' &&
@@ -34,6 +33,9 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
   const total = epochs.length
   const fade = sobre ? 0 : FADE
   const cycle = HOLD + fade
+  // Definition interne du canvas : elle suit la taille d'affichage (cf. canvasWidthFor).
+  // La figer a 1200 px faisait boucler le rechargement sur telephone.
+  const CANVAS_W = buffer.canvasW ?? 1200
   const canvasH = Math.round(CANVAS_W * buffer.aspect)
 
   // La boucle d'animation lit la vue dans une ref : la mettre dans les dépendances
@@ -130,7 +132,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
     }
     canvas.addEventListener('wheel', onWheel, { passive: false })
     return () => canvas.removeEventListener('wheel', onWheel)
-  }, [onViewChange, canvasH])
+  }, [onViewChange, canvasH, CANVAS_W])
 
   const onPointerDown = (e) => {
     // Enregistrer le pointeur d'abord : la capture est un confort et peut échouer.

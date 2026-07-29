@@ -28,6 +28,17 @@ export function aspectFor(viewportWidth) {
   return viewportWidth < 640 ? 1.25 : 2 / 3
 }
 
+// Définition interne du canvas. Elle était figée à 1200 px, dupliquée dans App et
+// Player - et sur téléphone cela bouclait : le tampon mobile (1400 px de large, dont
+// la moitie couvre la vue) ne fournit que 700 px, or needsRefetch exige
+// 700 x 1.5 >= 1200. La condition restait vraie apres chaque rechargement, donc on
+// rechargeait sans fin. Invisible en WMS (19 requêtes par tour), ruineux en WMTS.
+// Le canvas est affiche 358 px sur telephone et 736 px sur bureau (mesure au navigateur) :
+// 700 px suffisent largement sur petit ecran, ecran Retina compris.
+export function canvasWidthFor(viewportWidth) {
+  return viewportWidth < 640 ? 700 : 1200
+}
+
 // data.geopf.fr accepte jusqu'a 5000 px de côté (sonde le 28/07), on reste très en
 // dessous. Sur petit écran on descend en définition : autant d'octets en moins sur
 // un forfait mobile, pour un rendu identique a l'oeil.
@@ -42,6 +53,7 @@ export function bufferFor(view, viewportWidth) {
     aspect,
     pxW,
     pxH: Math.round(pxW * aspect),
+    canvasW: canvasWidthFor(viewportWidth),
   }
 }
 
