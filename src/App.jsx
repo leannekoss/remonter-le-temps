@@ -472,12 +472,31 @@ export default function App() {
           )}
 
           {data.tropSerrees?.length > 0 && (
-            <p className="rounded-lg border border-[var(--color-filet)] px-4 py-3 text-sm">
-              Avant la photo aérienne, il y a les cartes. Dézoomez pour les faire apparaître :{' '}
-              {data.tropSerrees.map((m) => `${m.label} à partir de ${m.minWidthM} m`).join(', ')}.
-              Elles ont été dessinées à une échelle donnée ; plus près, on ne verrait que le
-              grain du papier.
-            </p>
+            /* Le message disait « dézoomez pour les faire apparaître » sans permettre de le
+               faire : il fallait deviner quel palier atteindre, et il annonçait « à partir
+               de 2000 m » quand le bouton juste au-dessus dit « 2 km ». C'est le passage de
+               800 m à 2 km qui devenait obscur - or c'est le moment le plus fort du site,
+               celui où la carte de Cassini apparaît. Le bouton y emmène directement, et il
+               porte l'ocre des cartes dessinées, comme elles dans la frise. */
+            <div className="rounded-lg border border-[var(--color-ocre)]/35 bg-[var(--color-ocre)]/8 px-4 py-3 text-sm">
+              <p>
+                Avant la photo aérienne, il y a les cartes. Elles ont été dessinées à une
+                échelle donnée ; plus près, on ne verrait que le grain du papier.
+              </p>
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                {data.tropSerrees.map((m) => (
+                  <button
+                    key={m.label}
+                    type="button"
+                    onClick={() => setView({ ...view, widthM: m.minWidthM })}
+                    className="tap inline-flex min-h-[44px] items-center rounded-lg border border-[var(--color-ocre)]/60 px-3 text-[var(--color-ocre)] transition-colors hover:bg-[var(--color-ocre)] hover:text-[var(--color-encre)]"
+                  >
+                    {m.label}
+                    <span className="ml-2 text-xs opacity-70">passer à {formatLargeur(m.minWidthM)}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
         </section>
       )}

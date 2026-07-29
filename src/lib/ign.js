@@ -30,13 +30,17 @@ const MAX_TUILES = 40
 //     (« normal » y répond 400 « Style normal unknown »)
 //   - zmax varie : Cassini s'arrête à 14, l'état-major à 15, les orthophotos vont à 18-19.
 //     C'est l'IGN qui encode ainsi l'échelle de dessin de ses cartes anciennes.
+// `nature` distingue les trois matières que le site mélange dans une même frise :
+// une carte gravée de 1760, un tirage argentique de 1955 et une orthophoto couleur de 2024
+// ne sont pas le même objet, et rien ne le disait. L'interface s'en sert pour colorer la
+// frise — voir les tokens --color-ocre / --color-prusse / --color-vermillon dans index.css.
 const O = (id, annee, label, extra = {}) =>
-  ({ id, style: 'normal', format: 'image/jpeg', zmin: 6, zmax: 18, annee, label, ...extra })
+  ({ id, style: 'normal', format: 'image/jpeg', zmin: 6, zmax: 18, nature: 'couleur', annee, label, ...extra })
 
 export const LAYERS = [
-  O('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 1957, '1950-1965', { style: 'BDORTHOHISTORIQUE', format: 'image/png', zmin: 0 }),
-  O('ORTHOIMAGERY.ORTHOPHOTOS.1965-1980', 1972, '1965-1980', { style: 'BDORTHOHISTORIQUE', format: 'image/png', zmin: 3 }),
-  O('ORTHOIMAGERY.ORTHOPHOTOS.1980-1995', 1987, '1980-1995', { style: 'BDORTHOHISTORIQUE', format: 'image/png', zmin: 3 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.1950-1965', 1957, '1950-1965', { style: 'BDORTHOHISTORIQUE', format: 'image/png', nature: 'argentique', zmin: 0 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.1965-1980', 1972, '1965-1980', { style: 'BDORTHOHISTORIQUE', format: 'image/png', nature: 'argentique', zmin: 3 }),
+  O('ORTHOIMAGERY.ORTHOPHOTOS.1980-1995', 1987, '1980-1995', { style: 'BDORTHOHISTORIQUE', format: 'image/png', nature: 'argentique', zmin: 3 }),
   O('ORTHOIMAGERY.ORTHOPHOTOS2000-2005', 2002, '2000-2005'),
   O('ORTHOIMAGERY.ORTHOPHOTOS2006-2010', 2008, '2006-2010'),
   O('ORTHOIMAGERY.ORTHOPHOTOS2011-2015', 2013, '2011-2015'),
@@ -60,8 +64,8 @@ export const LAYERS = [
 // montre que du grain. D'où minWidthM, la largeur de vue en dessous de laquelle on ne
 // les propose pas. Seuils validés à l'oeil le 28/07 sur la parcelle de référence.
 export const HISTORIC = [
-  O('AN-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI', 1760, 'vers 1760 - Cassini', { zmin: 0, zmax: 14, minWidthM: 2000 }),
-  O('GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 1840, 'vers 1840 - état-major', { zmax: 15, minWidthM: 700 }),
+  O('AN-IGNF_GEOGRAPHICALGRIDSYSTEMS.CASSINI', 1760, 'vers 1760 - Cassini', { zmin: 0, zmax: 14, minWidthM: 2000, nature: 'carte' }),
+  O('GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40', 1840, 'vers 1840 - état-major', { zmax: 15, minWidthM: 700, nature: 'carte' }),
 ]
 
 const M_PER_DEG = 111320
@@ -193,7 +197,7 @@ export async function loadEpoch(couche, bbox, pxW, pxH) {
   // plus à rien.
   const cle = `${z}|${octets.sort((a, b) => a - b).join(',')}`
   const hash = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(cle)))
-  return { label: couche.label, bitmap, hash, tuiles: posees, z }
+  return { label: couche.label, nature: couche.nature, bitmap, hash, tuiles: posees, z }
 }
 
 // Charge tous les millésimes. `onEpoch` reçoit chaque vue dès son arrivée, déduplication

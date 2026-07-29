@@ -4,6 +4,21 @@ import { sourceRect, zoomAt, panBy, formatLargeur } from './lib/view.js'
 const HOLD = 1100   // ms d'affichage plein d'un millesime
 const FADE = 700    // ms de fondu vers le suivant
 
+// La couleur dit la NATURE du document, pas l'humeur du designer : une carte gravée,
+// un tirage argentique et une photo couleur ne sont pas la même matière, et la frise
+// les alignait en gris uniforme. Teintes issues de la légende d'une carte d'état-major.
+const TEINTE = {
+  carte: 'var(--color-ocre)',
+  argentique: 'var(--color-prusse)',
+  couleur: 'var(--color-vermillon)',
+}
+const teinteDe = (e) => TEINTE[e?.nature] ?? 'var(--color-vermillon)'
+const NATURE_DITE = {
+  carte: 'carte dessinée',
+  argentique: 'photographie noir et blanc',
+  couleur: 'photographie couleur',
+}
+
 const reduceMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -309,7 +324,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
           onChange={(e) => { setPlaying(false); goTo(Number(e.target.value)) }}
           aria-label="Choisir le millésime"
           aria-valuetext={annee}
-          className="h-11 flex-1 accent-[var(--color-vermillon)]"
+          style={{ accentColor: teinteDe(epochs[index]) }}
+          className="h-11 flex-1 transition-[accent-color] duration-300"
         />
 
         {videoPossible ? (
@@ -397,16 +413,33 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onReco
             key={e.label}
             onClick={() => { setPlaying(false); goTo(i) }}
             aria-current={i === index}
-            className={`h-9 rounded px-2.5 text-xs tabular-nums transition-colors ${
-              i === index
-                ? 'bg-[var(--color-vermillon)] text-[var(--color-encre)]'
-                : 'text-[var(--color-attenue)] hover:text-[var(--color-craie)]'
-            }`}
+            aria-label={`${e.label}, ${NATURE_DITE[e.nature] ?? ''}`}
+            style={i === index
+              ? { background: teinteDe(e), color: 'var(--color-encre)' }
+              : { color: teinteDe(e) }}
+            className="h-9 rounded px-2.5 text-xs tabular-nums transition-colors hover:brightness-125"
           >
             {e.label}
           </button>
         ))}
       </div>
+
+      {/* Clé de lecture. Une couleur qui signifie mais qu'on ne peut pas décoder ne
+          signifie rien. La nature est aussi portée par l'aria-label de chaque millésime :
+          l'information ne repose jamais sur la seule couleur. */}
+      {/* Visible AUSSI sur téléphone, contrairement à la frise nommée juste au-dessus :
+          le téléphone est le cas nominal, et c'est là que la réglette colorée serait
+          indécodable sans clé. */}
+      <p className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-[var(--color-attenue)]">
+        {[['carte', 'cartes dessinées'], ['argentique', 'noir et blanc'], ['couleur', 'couleur']]
+          .filter(([n]) => epochs.some((e) => e.nature === n))
+          .map(([n, dit]) => (
+            <span key={n} className="inline-flex items-center gap-1.5">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full" style={{ background: TEINTE[n] }} />
+              {dit}
+            </span>
+          ))}
+      </p>
     </figure>
   )
 }

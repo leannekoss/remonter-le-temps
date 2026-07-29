@@ -28,6 +28,23 @@
    générique, explicitement ecartee. L'accent vermillon est repris des batiments
    dessines en rouge sur la carte d'état-major - il vient de la matière, pas d'un
    nuancier. Contrastes verifies : texte 17.0:1, attenue 8.6:1, accent 5.5:1. */
+/* La palette est celle de la LÉGENDE d'une carte d'état-major, pas un nuancier : le
+   carmin du bâti (d'où venait déjà le vermillon), l'ocre des routes, le bleu de Prusse
+   de l'hydrographie. Trois couleurs conventionnelles de la cartographie française du
+   XIXe, donc issues de la matière du produit.
+
+   Elles ne décorent pas : elles disent la NATURE du document affiché, que la frise
+   mélangeait en gris uniforme. Une carte gravée de 1760, un tirage argentique de 1955 et
+   une orthophoto couleur de 2024 ne sont pas le même objet.
+     ocre      -> les cartes dessinées (Cassini, état-major)
+     prusse    -> les campagnes argentiques en noir et blanc (1950-1995)
+     vermillon -> les photographies couleur (2000 et après) + l'accent d'action
+
+   Ce n'est PAS du sépia ni du parchemin : PRODUCT.md les écarte explicitement. Ce sont
+   des couleurs de tracé, vives, pas de la patine de papier.
+   Contrastes calculés sur l'encre : ocre 8.2:1, prusse 7.6:1, vermillon 5.5:1. Tous AA,
+   et symétriques : l'encre sur ces trois couleurs donne les mêmes ratios, donc les
+   boutons actifs (fond coloré, texte encre) passent aussi. */
 @theme {
   --color-encre: #130f0a;
   --color-surface: #221d17;
@@ -35,6 +52,8 @@
   --color-craie: #f4f1ec;
   --color-attenue: #b2ada4;
   --color-vermillon: #e26239;
+  --color-ocre: #d9a03f;
+  --color-prusse: #7fa8cc;
 
   --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif;
 }
