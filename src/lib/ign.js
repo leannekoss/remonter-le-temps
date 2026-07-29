@@ -18,6 +18,12 @@
 const WMTS = 'https://data.geopf.fr/wmts'
 const TUILE = 256
 
+// Plafond de tuiles par millésime. Calibré sur les mesures du 29/07 : une vue de 2 km
+// demande environ 23 tuiles au niveau retenu, une vue de 300 m environ 35. Au-delà de 40
+// on paie un cran de zoom inutile - c'est ce qui faisait exploser le coût dans le sud
+// de la France. Voir le commentaire de loadEpoch.
+const MAX_TUILES = 40
+
 // Chaque couche a SON style et SA plage de niveaux : lus dans le GetCapabilities WMTS,
 // pas devinés. Deux pièges qui feraient disparaître des millésimes en silence :
 //   - les campagnes historiques veulent le style BDORTHOHISTORIQUE, pas « normal »
@@ -115,15 +121,31 @@ export async function loadEpoch(couche, bbox, pxW, pxH) {
   const [lat1, lon1, lat2, lon2] = bbox
   const latC = (lat1 + lat2) / 2
   const widthM = (lon2 - lon1) * M_PER_DEG * Math.cos(rad(latC))
-  const z = niveauPour(latC, widthM, pxW, couche)
 
-  const hg = enTuiles(lat2, lon1, z)   // haut-gauche : latitude haute, longitude basse
-  const bd = enTuiles(lat1, lon2, z)
-  const col0 = Math.floor(hg.x), col1 = Math.floor(bd.x)
-  const row0 = Math.floor(hg.y), row1 = Math.floor(bd.y)
-
-  const cols = col1 - col0 + 1
-  const rows = row1 - row0 + 1
+  // Le niveau voulu, puis un plafond de tuiles.
+  //
+  // ⚠️ Sans ce plafond, le coût réseau dépend de la LATITUDE. La résolution d'un niveau
+  // vaut 156543 x cos(lat) / 2^z : deux lieux peuvent tomber de part et d'autre du seuil
+  // d'arrondi et différer d'un cran, or un cran = quatre fois plus de tuiles.
+  // Mesuré le 29/07 sur la même vue de 2 km : Rennes (48,1° N) 292 requêtes en niveau 15,
+  // le viaduc de Millau (44,1° N) 1294 requêtes en niveau 16 - pour une différence de
+  // netteté invisible sur un canvas de 736 px. Le sud payait 4,4 fois plus cher.
+  //
+  // On descend donc d'un cran tant que la mosaïque dépasse MAX_TUILES. Le coût est borné
+  // quelle que soit la latitude, et l'image reste nette : le tampon fait deux fois la vue
+  // affichée, et needsRefetch recharge avant que le zoom ne rende l'étirement visible.
+  let z = niveauPour(latC, widthM, pxW, couche)
+  let hg, bd, col0, col1, row0, row1, cols, rows
+  for (;;) {
+    hg = enTuiles(lat2, lon1, z)   // haut-gauche : latitude haute, longitude basse
+    bd = enTuiles(lat1, lon2, z)
+    col0 = Math.floor(hg.x); col1 = Math.floor(bd.x)
+    row0 = Math.floor(hg.y); row1 = Math.floor(bd.y)
+    cols = col1 - col0 + 1
+    rows = row1 - row0 + 1
+    if (cols * rows <= MAX_TUILES || z <= couche.zmin) break
+    z--
+  }
 
   // Sonde : une seule tuile, au centre, AU NIVEAU REELLEMENT AFFICHE. La plupart des
   // millesimes ne couvrent pas un point donne ; sans cette sonde on telechargeait

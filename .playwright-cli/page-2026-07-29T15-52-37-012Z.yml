@@ -1,0 +1,45 @@
+- generic [ref=e3]:
+  - banner [ref=e4]:
+    - heading "Remonter le temps" [level=1] [ref=e5]
+    - paragraph [ref=e6]:
+      - text: "Un lieu en France à travers le temps : les photos aériennes de l'IGN depuis 1950, et en dézoomant, la carte d'état-major du XIX"
+      - superscript [ref=e7]: e
+      - text: siècle puis celle de Cassini.
+  - generic [ref=e8]:
+    - generic [ref=e9]:
+      - textbox "Adresse ou coordonnées" [ref=e11]:
+        - /placeholder: Une adresse en France
+      - button "Utiliser ma position" [ref=e12]:
+        - img [ref=e13]
+    - button "Voir ce lieu" [ref=e17]
+  - generic [ref=e18]:
+    - paragraph [ref=e19]: Tapez une adresse et l'animation se lance toute seule.
+    - button "Utiliser ma position" [ref=e20]:
+      - img [ref=e21]
+      - text: Utiliser ma position
+    - paragraph [ref=e25]: "Ou commencez par un lieu qui a beaucoup changé :"
+    - list [ref=e26]:
+      - listitem [ref=e27]:
+        - button "Le viaduc de Millau il n'existait pas avant 2004" [ref=e28]:
+          - generic [ref=e29]: Le viaduc de Millau
+          - generic [ref=e30]: il n'existait pas avant 2004
+      - listitem [ref=e31]:
+        - button "La Défense des usines, puis des tours" [ref=e32]:
+          - generic [ref=e33]: La Défense
+          - generic [ref=e34]: des usines, puis des tours
+      - listitem [ref=e35]:
+        - button "L'aéroport de Roissy des champs jusqu'en 1974" [ref=e36]:
+          - generic [ref=e37]: L'aéroport de Roissy
+          - generic [ref=e38]: des champs jusqu'en 1974
+      - listitem [ref=e39]:
+        - button "Le Mont-Saint-Michel la digue a disparu" [ref=e40]:
+          - generic [ref=e41]: Le Mont-Saint-Michel
+          - generic [ref=e42]: la digue a disparu
+  - contentinfo [ref=e43]:
+    - paragraph [ref=e44]:
+      - text: Fait avec amour par
+      - link "Henri Casalis" [ref=e45] [cursor=pointer]:
+        - /url: https://www.linkedin.com/in/henricasalis/
+    - paragraph [ref=e46]: "Photographies aériennes, carte d'état-major et carte de Cassini : Institut national de l'information géographique et forestière (IGN), via data.geopf.fr, sous Licence Ouverte Etalab 2.0. Cassini numérisée avec les Archives nationales. Données mises à jour en 2026. Recherche d'adresse : Base Adresse Nationale."
+    - paragraph [ref=e47]: "L'IGN photographie la France par rotation : tous les départements ne sont pas survolés chaque année, le nombre de millésimes varie donc selon les endroits."
+    - paragraph [ref=e48]: "Ce site ne stocke rien, n'a pas de serveur et ne charge aucun script tiers : tout le traitement se fait dans votre navigateur. Il interroge en revanche deux services publics directement depuis votre appareil, qui reçoivent donc vos requêtes : la Base Adresse Nationale reçoit l'adresse que vous tapez, ou votre position si vous l'autorisez, et l'IGN reçoit les coordonnées de la vue affichée. Ce qu'ils en conservent relève de leurs propres conditions."

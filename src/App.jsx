@@ -30,6 +30,7 @@ export default function App() {
   const [query, setQuery] = useState('')
   const [options, setOptions] = useState([])
   const [typing, setTyping] = useState(false)
+  const [actif, setActif] = useState(-1)        // suggestion surlignée au clavier, -1 = aucune
   const [place, setPlace] = useState(null)      // metadonnees de geocodage, pour le message
   const [view, setView] = useState(null)        // fenetre affichee
   const [data, setData] = useState(null)        // { epochs, buffer, failed, tropSerrees }
@@ -165,6 +166,29 @@ export default function App() {
     setView({ lat: next.lat, lon: next.lon, widthM: widthM ?? widthForType(next.type) })
   }
 
+  // La liste ne s'ouvre que si l'utilisateur a réellement tapé : sinon le libellé venu
+  // d'un lien partagé alimenterait la recherche, et la liste recouvrirait l'image.
+  const listeOuverte = options.length > 0 && query !== options[0]?.label
+
+  const choisir = (o) => {
+    setTyping(false); setActif(-1); setQuery(o.label); setOptions([]); goTo(o)
+  }
+
+  // Navigation au clavier dans les suggestions. Sans cela, le champ était utilisable à la
+  // souris et au doigt seulement : on pouvait taper et valider, mais pas parcourir la liste.
+  const auClavier = (e) => {
+    if (!listeOuverte) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault(); setActif((i) => (i + 1) % options.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault(); setActif((i) => (i <= 0 ? options.length : i) - 1)
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); setOptions([]); setActif(-1)
+    } else if (e.key === 'Enter' && actif >= 0) {
+      e.preventDefault(); choisir(options[actif])
+    }
+  }
+
   const submit = async (e) => {
     e.preventDefault()
     const coords = parseCoords(query)
@@ -250,19 +274,31 @@ export default function App() {
           <div className="relative flex-1">
             <input
               value={query}
-              onChange={(e) => { setTyping(true); setQuery(e.target.value) }}
+              onChange={(e) => { setTyping(true); setActif(-1); setQuery(e.target.value) }}
+              onKeyDown={auClavier}
               placeholder="Une adresse en France"
               aria-label="Adresse ou coordonnées"
+              role="combobox"
+              aria-expanded={listeOuverte}
+              aria-controls="suggestions-adresse"
+              aria-autocomplete="list"
+              aria-activedescendant={actif >= 0 ? `suggestion-${actif}` : undefined}
               className={champ}
             />
-            {options.length > 0 && query !== options[0]?.label && (
-              <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] shadow-2xl">
-                {options.map((o) => (
-                  <li key={o.label + o.lat}>
+            {listeOuverte && (
+              <ul
+                id="suggestions-adresse"
+                role="listbox"
+                aria-label="Adresses proposées"
+                className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] shadow-2xl"
+              >
+                {options.map((o, i) => (
+                  <li key={o.label + o.lat} role="option" id={`suggestion-${i}`} aria-selected={i === actif}>
                     <button
                       type="button"
-                      onClick={() => { setTyping(false); setQuery(o.label); setOptions([]); goTo(o) }}
-                      className="block w-full px-4 py-3 text-left text-sm hover:bg-white/5"
+                      tabIndex={-1}
+                      onClick={() => choisir(o)}
+                      className={`block w-full px-4 py-3 text-left text-sm hover:bg-white/5 ${i === actif ? 'bg-white/10' : ''}`}
                     >
                       {o.label}
                       <span className="ml-2 text-xs text-[var(--color-attenue)]">{o.context}</span>
@@ -372,7 +408,10 @@ export default function App() {
       )}
 
       {data && view && (
-        <section ref={vueRef} className="flex min-w-0 scroll-mt-4 flex-col gap-4">
+        <section ref={vueRef} aria-labelledby="titre-vue" className="flex min-w-0 scroll-mt-4 flex-col gap-4">
+          {/* Titre de section pour les lecteurs d'écran : ils naviguent par titres, et la
+              page n'en avait qu'un seul. Masqué à l'oeil, la vue parle d'elle-même. */}
+          <h2 id="titre-vue" className="sr-only">Le lieu à travers le temps</h2>
           <Player
             epochs={data.epochs}
             buffer={data.buffer}
@@ -431,13 +470,14 @@ export default function App() {
       )}
 
       <footer className="mt-auto border-t border-[var(--color-filet)] pt-5 text-xs leading-relaxed text-[var(--color-attenue)]">
+        <h2 className="sr-only">Sources, licence et confidentialité</h2>
         <p className="mb-3 text-sm text-[var(--color-craie)]">
           Fait avec amour par{' '}
           <a
             href="https://www.linkedin.com/in/henricasalis/"
             target="_blank"
             rel="noopener noreferrer"
-            className="tap inline-block underline decoration-[var(--color-vermillon)] decoration-2 underline-offset-4 transition-colors hover:text-[var(--color-vermillon)]"
+            className="tap inline-flex min-h-[44px] items-center underline decoration-[var(--color-vermillon)] decoration-2 underline-offset-4 transition-colors hover:text-[var(--color-vermillon)]"
           >
             Henri Casalis
           </a>

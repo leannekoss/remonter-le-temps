@@ -1,0 +1,57 @@
+- generic [ref=f2e1]:
+  - generic [ref=f2e3]:
+    - banner [ref=f2e4]:
+      - heading "Remonter le temps" [level=1] [ref=f2e5]
+      - paragraph [ref=f2e6]:
+        - text: "Un lieu en France à travers le temps : les photos aériennes de l'IGN depuis 1950, et en dézoomant, la carte d'état-major du XIX"
+        - superscript [ref=f2e7]: e
+        - text: siècle puis celle de Cassini.
+    - generic [ref=f2e8]:
+      - generic [ref=f2e9]:
+        - textbox "Adresse ou coordonnées" [ref=f2e11]:
+          - /placeholder: Une adresse en France
+          - text: 12 Rue de Rivoli 75004 Paris
+        - button "Utiliser ma position" [ref=f2e12]:
+          - img [ref=f2e13]
+      - button "Voir ce lieu" [ref=f2e17]
+      - generic [ref=f2e54]:
+        - button "150 m" [ref=f2e55]
+        - button "300 m" [pressed] [ref=f2e56]
+        - button "800 m" [ref=f2e57]
+        - button "2 km" [ref=f2e58]
+    - generic [ref=f2e59]:
+      - figure "Les photographies aériennes de l'IGN pour ce lieu, mises bout à bout." [ref=f2e60]:
+        - generic [ref=f2e61]:
+          - img "Vue aérienne du lieu, millésime 2017" [ref=f2e98]
+          - generic [ref=f2e63]:
+            - button "Zoomer" [ref=f2e64]: +
+            - button "Dézoomer" [ref=f2e65]: −
+          - generic:
+            - generic:
+              - generic: "2017"
+              - generic: 300 m
+        - generic [ref=f2e66]: Les photographies aériennes de l'IGN pour ce lieu, mises bout à bout.
+        - generic [ref=f2e67]:
+          - button "Mettre en pause" [ref=f2e68]:
+            - img [ref=f2e69]
+          - slider "Choisir le millésime" [ref=f2e72]: "5"
+          - button "Créer la vidéo" [ref=f2e73]
+        - generic [ref=f2e92]:
+          - link "Télécharger la vidéo" [ref=f2e93] [cursor=pointer]:
+            - /url: blob:https://remonter-le-temps.vercel.app/ccdb4aaa-f78c-4b85-a4ab-2d61b91e6117
+          - button "Envoyer à quelqu'un" [ref=f2e94]
+          - generic [ref=f2e95]: MP4, 4.8 Mo
+      - generic [ref=f2e74]:
+        - button "Partager ce lieu" [active] [ref=f2e75]
+        - generic [ref=f2e76]: 9 millésimes
+      - paragraph [ref=f2e77]: Faites glisser l'image pour vous déplacer. Les boutons + et − changent l'échelle, comme la molette et le pincement.
+      - paragraph [ref=f2e78]: "Avant la photo aérienne, il y a les cartes. Dézoomez pour les faire apparaître : vers 1760 - Cassini à partir de 2000 m, vers 1840 - état-major à partir de 700 m. Elles ont été dessinées à une échelle donnée ; plus près, on ne verrait que le grain du papier."
+    - contentinfo [ref=f2e43]:
+      - paragraph [ref=f2e44]:
+        - text: Fait avec amour par
+        - link "Henri Casalis" [ref=f2e45] [cursor=pointer]:
+          - /url: https://www.linkedin.com/in/henricasalis/
+      - paragraph [ref=f2e46]: "Photographies aériennes, carte d'état-major et carte de Cassini : Institut national de l'information géographique et forestière (IGN), via data.geopf.fr, sous Licence Ouverte Etalab 2.0. Cassini numérisée avec les Archives nationales. Données mises à jour en 2026. Recherche d'adresse : Base Adresse Nationale."
+      - paragraph [ref=f2e47]: "L'IGN photographie la France par rotation : tous les départements ne sont pas survolés chaque année, le nombre de millésimes varie donc selon les endroits."
+      - paragraph [ref=f2e48]: "Ce site ne stocke rien, n'a pas de serveur et ne charge aucun script tiers : tout le traitement se fait dans votre navigateur. Il interroge en revanche deux services publics directement depuis votre appareil, qui reçoivent donc vos requêtes : la Base Adresse Nationale reçoit l'adresse que vous tapez, ou votre position si vous l'autorisez, et l'IGN reçoit les coordonnées de la vue affichée. Ce qu'ils en conservent relève de leurs propres conditions."
+  - generic: QA - remonter-le-temps - 2026-07-29 - capture de test

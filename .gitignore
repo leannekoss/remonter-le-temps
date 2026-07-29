@@ -7,3 +7,6 @@ dist
 .impeccable
 .playwright-mcp
 /*.png
+
+# Sorties de QA (videos, captures) - le depot est public
+.qa/
