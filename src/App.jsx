@@ -47,13 +47,16 @@ export default function App() {
   const abortRef = useRef(null)
   const dataRef = useRef(null)
 
-  // Un ImageBitmap occupe plusieurs mégaoctets hors du tas JavaScript. Chaque
-  // remplacement libère ceux que la nouvelle vue ne réutilise pas.
   const replaceData = useCallback((next) => {
-    const previous = dataRef.current
-    closeEpochs(previous?.epochs, next?.epochs)
     dataRef.current = next
     setData(next)
+  }, [])
+
+  // Le Player libère un jeu seulement APRES avoir annulé la boucle RAF qui le
+  // dessinait. Fermer ici, avant le rendu React suivant, détachait parfois une source
+  // encore référencée par l'ancienne boucle.
+  const releaseEpochs = useCallback((epochs) => {
+    closeEpochs(epochs, dataRef.current?.epochs)
   }, [])
 
   // La rotation du téléphone change le format de la vue, donc le tampon a retelecharger.
@@ -146,8 +149,11 @@ export default function App() {
   useEffect(() => () => {
     ++runRef.current
     abortRef.current?.abort()
-    closeEpochs(dataRef.current?.epochs)
+    const epochs = dataRef.current?.epochs
     dataRef.current = null
+    // Sur un démontage complet, laisser les nettoyages enfants annuler leur RAF avant
+    // de fermer le dernier jeu. Le timer fonctionne aussi dans un onglet en arrière-plan.
+    setTimeout(() => closeEpochs(epochs), 0)
   }, [])
 
   // Un geste ne déclenche un telechargement que s'il sort du tampon, reclame plus de
@@ -470,6 +476,7 @@ export default function App() {
             cle={data.cle}
             view={view}
             onViewChange={setView}
+            onReleaseEpochs={releaseEpochs}
           />
 
           <div className="flex flex-wrap items-center gap-3">
