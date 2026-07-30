@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { sourceRect, zoomAt, panBy, formatLargeur, MIN_WIDTH_M, MAX_WIDTH_M } from './lib/view.js'
+import { cancelThenRelease } from './lib/lifecycle.js'
 
 const HOLD = 1100   // ms d'affichage plein d'un millesime
 const FADE = 700    // ms de fondu vers le suivant
@@ -31,7 +32,7 @@ function pickMime() {
   return candidats.find((t) => MediaRecorder.isTypeSupported?.(t)) ?? ''
 }
 
-export default function Player({ epochs, buffer, view, cle, onViewChange }) {
+export default function Player({ epochs, buffer, view, cle, onViewChange, onReleaseEpochs }) {
   const canvasRef = useRef(null)
   const rafRef = useRef(0)
   const indexRef = useRef(0)
@@ -155,9 +156,19 @@ export default function Player({ epochs, buffer, view, cle, onViewChange }) {
       }
     }
 
+    const cleanup = () => {
+      // App conserve ceux du nouveau jeu par identité ; ceux qui sortent ne sont fermés
+      // qu'une fois la boucle propriétaire annulée.
+      cancelThenRelease(
+        () => cancelAnimationFrame(rafRef.current),
+        onReleaseEpochs,
+        epochs,
+      )
+    }
+
     if (!playing) {
       draw(Math.min(indexRef.current, total - 1), 0, 0)
-      return
+      return cleanup
     }
 
     const start = performance.now() - indexRef.current * cycle
@@ -174,8 +185,8 @@ export default function Player({ epochs, buffer, view, cle, onViewChange }) {
       rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(rafRef.current)
-  }, [epochs, buffer, playing, total, cycle, fade, canvasH])
+    return cleanup
+  }, [epochs, buffer, playing, total, cycle, fade, canvasH, onReleaseEpochs])
 
   // En pause, un geste ne relance pas la boucle : il faut redessiner a la main.
   useEffect(() => {
