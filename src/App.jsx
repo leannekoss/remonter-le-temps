@@ -45,6 +45,7 @@ export default function App() {
   const dejaDefile = useRef(false)
   const runRef = useRef(0)
   const abortRef = useRef(null)
+  const champRef = useRef(null)   // pour rendre le focus après un effacement
   const dataRef = useRef(null)
 
   const replaceData = useCallback((next) => {
@@ -300,7 +301,8 @@ export default function App() {
     setTimeout(() => setShared(false), 2000)
   }
 
-  const champ = 'w-full rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] px-4 py-3 text-[16px] outline-none placeholder:text-[var(--color-attenue)] focus:border-[var(--color-vermillon)]'
+  // pr-12 : la place du bouton d'effacement, pour que l'adresse ne passe pas dessous.
+  const champ = 'w-full rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] py-3 pl-4 pr-12 text-[16px] outline-none placeholder:text-[var(--color-attenue)] focus:border-[var(--color-vermillon)]'
 
   return (
     <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 px-4 py-6 sm:py-12">
@@ -328,8 +330,29 @@ export default function App() {
               aria-controls="suggestions-adresse"
               aria-autocomplete="list"
               aria-activedescendant={actif >= 0 ? `suggestion-${actif}` : undefined}
+              ref={champRef}
               className={champ}
             />
+            {/* Effacer en un geste. Sur téléphone, vider un champ qui contient déjà
+                « Square La Bruyère 38100 Grenoble » demande de viser la fin du texte
+                puis de maintenir la touche retour : personne ne le fait, on recommence
+                une recherche par-dessus l'ancienne. */}
+            {query && (
+              <button
+                type="button"
+                onClick={() => {
+                  setQuery(''); setOptions([]); setActif(-1); setTyping(false)
+                  champRef.current?.focus()
+                }}
+                aria-label="Effacer l'adresse"
+                title="Effacer l'adresse"
+                className="absolute top-1/2 right-1 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full text-[var(--color-attenue)] transition-colors hover:text-[var(--color-craie)]"
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
             {listeOuverte && (
               <ul
                 id="suggestions-adresse"

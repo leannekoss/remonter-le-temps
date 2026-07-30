@@ -49,6 +49,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
   const [index, setIndex] = useState(0)
   const [video, setVideo] = useState(null)
   const [enreg, setEnreg] = useState(null)   // { debut, duree } pendant la capture
+  const [echecPartage, setEchecPartage] = useState(false)
   const [tick, setTick] = useState(0)
 
   const total = epochs.length
@@ -287,14 +288,19 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
       if (recordingRef.current === active) recordingRef.current = null
       if (active.cancelled) return
       const ext = type.startsWith('video/mp4') ? 'mp4' : 'webm'
-      const blob = new Blob(chunks, { type })
+      // ⚠️ MediaRecorder renvoie un type complet, « video/mp4;codecs=avc1 ». Android
+      // refuse de partager un fichier dont le type porte des paramètres de codec, alors
+      // que navigator.canShare() répond quand même true (il ne regarde que le préfixe).
+      // Le bouton s'affichait donc, et le partage échouait sans rien dire.
+      const typeSimple = type.split(';')[0]
+      const blob = new Blob(chunks, { type: typeSimple })
       const nom = `remonter-le-temps.${ext}`
       const nextVideo = {
         url: URL.createObjectURL(blob),
         nom,
         ext,
         poids: Math.round(blob.size / 1048576 * 10) / 10,
-        file: new File([blob], nom, { type }),
+        file: new File([blob], nom, { type: typeSimple }),
       }
       videoRef.current = nextVideo
       setVideo(nextVideo)
@@ -320,8 +326,14 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
   const partagerVideo = async () => {
     if (!video || !navigator.canShare?.({ files: [video.file] })) return
     try {
+      setEchecPartage(false)
       await navigator.share({ files: [video.file], title: 'Remonter le temps' })
-    } catch { /* partage annule : le lien de telechargement reste la */ }
+    } catch (e) {
+      // Annuler le partage est un geste normal : on ne dit rien. Tout le reste est un
+      // échec réel, et le taire donnait un bouton qui ne répond pas - le même défaut
+      // qu'un bouton mort. Constaté sur Android : le partage échouait sans un mot.
+      if (e?.name !== 'AbortError') setEchecPartage(true)
+    }
   }
 
   void tick   // dépendance de rendu : c'est la minuterie qui fait avancer la barre
@@ -504,6 +516,13 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
           <span className="text-xs text-[var(--color-attenue)]">
             {video.ext.toUpperCase()}, {video.poids} Mo
           </span>
+          {echecPartage && (
+            <p className="basis-full text-xs text-[var(--color-attenue)]">
+              Votre téléphone n'a pas voulu ouvrir le partage. Utilisez « Télécharger la
+              vidéo » : le fichier ira dans vos téléchargements, et vous pourrez l'envoyer
+              depuis votre messagerie.
+            </p>
+          )}
         </div>
       )}
 
