@@ -49,6 +49,11 @@
   --color-encre: #130f0a;
   --color-surface: #221d17;
   --color-filet: #3b342d;
+  /* Le filet suffit pour séparer, pas pour dessiner un contrôle : à 1,56:1 sur l'encre,
+     le contour du champ d'adresse disparaît en plein soleil - or le site se consulte
+     dehors. WCAG 1.4.11 demande 3:1 pour un composant d'interface : ce contour atteint
+     3,20:1 (mesuré). Réservé aux éléments qu'on doit pouvoir viser du doigt. */
+  --color-contour: #6b6259;
   --color-craie: #f4f1ec;
   --color-attenue: #b2ada4;
   --color-vermillon: #e26239;
@@ -59,6 +64,21 @@
 }
 
 html, body, #root { height: 100%; }
+
+/* Le glissé sur l'image part souvent vers le bas alors que la page est calée en haut :
+   le navigateur y voit un « tirer pour rafraîchir » et recharge tout, effaçant le lieu
+   qu'on regardait. `contain` garde le geste dans la page. */
+html, body { overscroll-behavior-y: contain; }
+
+/* ⚠️ index.html porte viewport-fit=cover, qui étend la page sous l'encoche et sous la
+   barre de gestes. Sans ces marges, les liens du pied de page tombent pile sous la barre
+   de navigation du téléphone et leurs touchers partent à l'OS : viewport-fit sans
+   safe-area est pire que pas de viewport-fit du tout. */
+body {
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
 
 body {
   background: var(--color-encre);

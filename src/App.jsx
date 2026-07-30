@@ -218,6 +218,10 @@ export default function App() {
 
   const choisir = (o) => {
     setTyping(false); setActif(-1); setQuery(o.label); setOptions([]); goTo(o)
+    // Replier le clavier virtuel. Sans cela il reste ouvert après le choix et masque la
+    // moitié basse de l'écran - donc l'image, qui est le produit. Le défilement vers la
+    // vue ne sert à rien tant que le clavier occupe la place.
+    champRef.current?.blur()
   }
 
   // Navigation au clavier dans les suggestions. Sans cela, le champ était utilisable à la
@@ -237,6 +241,7 @@ export default function App() {
 
   const submit = async (e) => {
     e.preventDefault()
+    champRef.current?.blur()      // replier le clavier : il masque l'image, cf. choisir()
     const coords = parseCoords(query)
     if (coords) {
       const label = (await reverse(coords.lat, coords.lon)) ?? `${coords.lat}, ${coords.lon}`
@@ -302,7 +307,7 @@ export default function App() {
   }
 
   // pr-12 : la place du bouton d'effacement, pour que l'adresse ne passe pas dessous.
-  const champ = 'w-full rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] py-3 pl-4 pr-12 text-[16px] outline-none placeholder:text-[var(--color-attenue)] focus:border-[var(--color-vermillon)]'
+  const champ = 'w-full rounded-lg border border-[var(--color-contour)] bg-[var(--color-surface)] py-3 pl-4 pr-12 text-[16px] outline-none placeholder:text-[var(--color-attenue)] focus:border-[var(--color-vermillon)]'
 
   return (
     <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-6 px-4 py-6 sm:py-12">
@@ -380,7 +385,7 @@ export default function App() {
             type="button"
             onClick={locate}
             aria-label="Utiliser ma position"
-            className="tap grid h-[50px] w-[50px] shrink-0 place-items-center rounded-lg border border-[var(--color-filet)] transition-colors hover:border-[var(--color-vermillon)]"
+            className="tap grid h-[50px] w-[50px] shrink-0 place-items-center rounded-lg border border-[var(--color-contour)] transition-colors hover:border-[var(--color-vermillon)]"
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <circle cx="10" cy="10" r="3.2" stroke="currentColor" strokeWidth="1.6"/>

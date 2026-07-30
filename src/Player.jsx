@@ -39,6 +39,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
   const viewRef = useRef(view)
   const pointersRef = useRef(new Map())
   const pinchRef = useRef(null)
+  const dernierTapRef = useRef(0)   // horodatage de la tape précédente, pour le double-tape
   const recordingRef = useRef(null)
   const videoRef = useRef(null)
   // Lu par la boucle de dessin pour incruster l'année dans le canvas pendant la capture.
@@ -50,6 +51,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
   const [video, setVideo] = useState(null)
   const [enreg, setEnreg] = useState(null)   // { debut, duree } pendant la capture
   const [echecPartage, setEchecPartage] = useState(false)
+  const [interrompu, setInterrompu] = useState(false)
   const [tick, setTick] = useState(0)
 
   const total = epochs.length
@@ -109,6 +111,23 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
     if (!enreg) return
     const id = setInterval(() => setTick((t) => t + 1), 100)
     return () => clearInterval(id)
+  }, [enreg])
+
+  // ⚠️ L'enregistrement dure une vingtaine de secondes : le temps de recevoir un appel
+  // ou une notification. Or un onglet passé en arrière-plan voit son requestAnimationFrame
+  // suspendu : le canvas cesse de produire des images alors que MediaRecorder continue,
+  // et le fichier sort avec des images gelées. Sans ce garde-fou on livrait une vidéo
+  // abîmée sans le dire - le pire des cas.
+  useEffect(() => {
+    if (!enreg) return
+    const onHidden = () => {
+      if (!document.hidden) return
+      stopRecording()
+      clearVideo()
+      setInterrompu(true)
+    }
+    document.addEventListener('visibilitychange', onHidden)
+    return () => document.removeEventListener('visibilitychange', onHidden)
   }, [enreg])
 
   const goTo = (i) => {
@@ -244,8 +263,27 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
   }
 
   const onPointerUp = (e) => {
+    const depart = pointersRef.current.get(e.pointerId)
     pointersRef.current.delete(e.pointerId)
     if (pointersRef.current.size < 2) pinchRef.current = null
+
+    // Double tape pour zoomer, à l'endroit touché. C'est la convention de toutes les
+    // cartes sur téléphone, et le seul zoom praticable à une main : le pincement demande
+    // deux doigts, donc les deux mains quand on marche.
+    // On ne compte que les tapes courtes et immobiles, sinon un glissé rapide zoomerait.
+    if (!depart || pointersRef.current.size > 0) return
+    const bouge = Math.hypot(e.clientX - depart.x, e.clientY - depart.y) > 12
+    if (bouge) { dernierTapRef.current = 0; return }
+    const t = performance.now()
+    if (t - dernierTapRef.current < 320) {
+      dernierTapRef.current = 0
+      const r = e.currentTarget.getBoundingClientRect()
+      const k = CANVAS_W / r.width
+      onViewChange(zoomAt(viewRef.current, 1 / 1.8, CANVAS_W, canvasH,
+        (e.clientX - r.left) * k, (e.clientY - r.top) * k))
+    } else {
+      dernierTapRef.current = t
+    }
   }
 
   const zoomCentre = (facteur) =>
@@ -279,6 +317,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
     }
     const active = { recorder: rec, stream, timer: 0, cancelled: false }
     recordingRef.current = active
+    setInterrompu(false)
     enregRef.current = true          // incruste l'année dans le canvas dès la 1re image
     setEnreg({ debut: performance.now(), duree })
     rec.ondataavailable = (e) => e.data.size && chunks.push(e.data)
@@ -346,6 +385,9 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
     typeof MediaRecorder !== 'undefined' &&
     !!canvasRef.current?.captureStream &&
     !!pickMime()
+  // Le partage natif prend la tête quand il existe : sur iPhone c'est le seul chemin
+  // fiable pour ranger la vidéo dans le téléphone (cf. le bloc des boutons plus bas).
+  const partageDispo = !!video && !!navigator.canShare?.({ files: [video.file] })
 
   return (
     <figure className="m-0 min-w-0">
@@ -379,7 +421,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
             title={view.widthM <= MIN_WIDTH_M
               ? `Zoom maximal atteint (${formatLargeur(MIN_WIDTH_M)})`
               : 'Zoomer, voir plus serré'}
-            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-black/55"
+            className="grid h-11 w-11 place-items-center rounded-full border border-white/25 bg-black/70 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-black/55"
           >
             +
           </button>
@@ -391,7 +433,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
             title={view.widthM >= MAX_WIDTH_M
               ? `Vue la plus large (${formatLargeur(MAX_WIDTH_M)}) : au-delà, les cartes anciennes ne sont plus lisibles`
               : 'Dézoomer, voir plus large — les cartes anciennes apparaissent à partir de 700 m'}
-            className="grid h-11 w-11 place-items-center rounded-full bg-black/55 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/80 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-black/55"
+            className="grid h-11 w-11 place-items-center rounded-full border border-white/25 bg-black/70 text-2xl leading-none text-white backdrop-blur-sm transition-colors hover:bg-black/85 disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-black/55"
           >
             −
           </button>
@@ -456,6 +498,13 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
         )}
       </div>
 
+      {interrompu && !enreg && (
+        <p className="mt-3 rounded-lg border border-[var(--color-ocre)]/40 bg-[var(--color-ocre)]/8 px-4 py-3 text-sm">
+          Enregistrement interrompu : la page est passée en arrière-plan, et l'animation
+          s'arrête avec elle. Relancez « Créer la vidéo » en restant sur cette page.
+        </p>
+      )}
+
       {enreg && (() => {
         const part = Math.min(1, (performance.now() - enreg.debut) / enreg.duree)
         const restant = Math.max(0, Math.ceil((enreg.duree * (1 - part)) / 1000))
@@ -498,29 +547,44 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
 
       {video && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-filet)] p-3">
-          <a
-            href={video.url}
-            download={video.nom}
-            className="tap grid h-11 place-items-center rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
-          >
-            Télécharger la vidéo
-          </a>
-          {navigator.canShare?.({ files: [video.file] }) && (
-            <button
-              onClick={partagerVideo}
-              className="tap h-11 rounded-full border border-[var(--color-filet)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
+          {/* ⚠️ Quand le partage natif existe, il passe en action principale.
+              Sur iPhone, `<a download>` sur une URL de blob n'enregistre pas le fichier :
+              Safari navigue vers le blob, on quitte la page et on perd le lieu affiché.
+              La feuille de partage, elle, propose « Enregistrer dans Fichiers » et reste
+              dans la page. Le téléchargement direct demeure, en second, pour le bureau. */}
+          {partageDispo ? (
+            <>
+              <button
+                onClick={partagerVideo}
+                className="tap grid h-11 place-items-center rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
+              >
+                Envoyer ou enregistrer
+              </button>
+              <a
+                href={video.url}
+                download={video.nom}
+                className="tap grid h-11 place-items-center rounded-full border border-[var(--color-contour)] px-4 text-sm transition-colors hover:border-[var(--color-vermillon)]"
+              >
+                Télécharger
+              </a>
+            </>
+          ) : (
+            <a
+              href={video.url}
+              download={video.nom}
+              className="tap grid h-11 place-items-center rounded-full bg-[var(--color-vermillon)] px-5 text-sm font-medium text-[var(--color-encre)]"
             >
-              Envoyer à quelqu'un
-            </button>
+              Télécharger la vidéo
+            </a>
           )}
           <span className="text-xs text-[var(--color-attenue)]">
             {video.ext.toUpperCase()}, {video.poids} Mo
           </span>
           {echecPartage && (
             <p className="basis-full text-xs text-[var(--color-attenue)]">
-              Votre téléphone n'a pas voulu ouvrir le partage. Utilisez « Télécharger la
-              vidéo » : le fichier ira dans vos téléchargements, et vous pourrez l'envoyer
-              depuis votre messagerie.
+              Votre téléphone n'a pas voulu ouvrir le partage. Utilisez « Télécharger » :
+              le fichier ira dans vos téléchargements, et vous pourrez l'envoyer depuis
+              votre messagerie.
             </p>
           )}
         </div>
