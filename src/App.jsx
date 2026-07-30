@@ -46,6 +46,7 @@ export default function App() {
   const runRef = useRef(0)
   const abortRef = useRef(null)
   const champRef = useRef(null)   // pour rendre le focus après un effacement
+  const chargementRef = useRef(null)   // cible du défilement tant que la vue n'existe pas
   const [lien, setLien] = useState('')   // lien de partage, affiché après un clic
   const dataRef = useRef(null)
 
@@ -212,7 +213,21 @@ export default function App() {
     vueRef.current.scrollIntoView({ behavior: sobre ? 'auto' : 'smooth', block: 'start' })
   }, [data])
 
+  // Emmener l'écran vers la zone de résultat TOUT DE SUITE, sans attendre la première
+  // image. Elle met une à trois secondes à venir : jusque-là on restait figé en haut sur
+  // le formulaire, sans voir l'indicateur de chargement apparu plus bas, à se demander
+  // si le toucher avait pris - puis la page sautait d'un coup.
+  const defilerVersVue = () => {
+    const sobre = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    // Deux images d'attente : React doit avoir monté le bloc de chargement.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const cible = chargementRef.current ?? vueRef.current
+      cible?.scrollIntoView({ behavior: sobre ? 'auto' : 'smooth', block: 'start' })
+    }))
+  }
+
   const goTo = (next, widthM) => {
+    defilerVersVue()
     dejaDefile.current = false
     setPlace(next)
     setView({ lat: next.lat, lon: next.lon, widthM: widthM ?? widthForType(next.type) })
@@ -492,14 +507,19 @@ export default function App() {
         </section>
       )}
 
+      {/* Le repère de défilement est ici ET sur la section de résultat : au moment du
+          toucher, la vue n'existe pas encore, seul le chargement est monté. Sans cela
+          le défilement immédiat n'aurait rien à viser. */}
       {progress && (
-        <Chargement
-          done={progress.done}
-          total={progress.total}
-          trouvees={progress.trouvees}
-          dernier={progress.dernier}
-          cartesAnciennes={!!view && view.widthM >= 700}
-        />
+        <div ref={chargementRef} className="scroll-mt-4">
+          <Chargement
+            done={progress.done}
+            total={progress.total}
+            trouvees={progress.trouvees}
+            dernier={progress.dernier}
+            cartesAnciennes={!!view && view.widthM >= 700}
+          />
+        </div>
       )}
 
       {error && (

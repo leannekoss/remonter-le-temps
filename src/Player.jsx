@@ -457,7 +457,7 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
         Les photographies aériennes de l'IGN pour ce lieu, mises bout à bout.
       </figcaption>
 
-      <div className="mt-3 flex items-center gap-2">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <button
           onClick={() => setPlaying((p) => !p)}
           aria-label={playing ? 'Mettre en pause' : 'Lancer la lecture'}
@@ -481,6 +481,31 @@ export default function Player({ epochs, buffer, view, cle, onViewChange, onRele
           style={{ accentColor: teinteDe(epochs[index]) }}
           className="h-11 flex-1 transition-[accent-color] duration-300"
         />
+
+        {/* Pas à pas, sur téléphone seulement : là-bas la frise nommée est masquée et la
+            réglette est le seul moyen de naviguer. Viser 2013 plutôt que 2011 au pouce,
+            parmi douze millésimes sur 390 px, relève de l'horlogerie. Sur grand écran la
+            frise fait déjà ce travail, et mieux. */}
+        <div className="flex shrink-0 gap-1 sm:hidden">
+          <button
+            type="button"
+            onClick={() => { setPlaying(false); goTo(indexRef.current - 1) }}
+            disabled={index === 0}
+            aria-label="Millésime précédent"
+            className="tap grid h-11 w-11 place-items-center rounded-full border border-[var(--color-contour)] text-lg leading-none transition-colors disabled:opacity-35"
+          >
+            ‹
+          </button>
+          <button
+            type="button"
+            onClick={() => { setPlaying(false); goTo(indexRef.current + 1) }}
+            disabled={index === total - 1}
+            aria-label="Millésime suivant"
+            className="tap grid h-11 w-11 place-items-center rounded-full border border-[var(--color-contour)] text-lg leading-none transition-colors disabled:opacity-35"
+          >
+            ›
+          </button>
+        </div>
 
         {videoPossible ? (
           <button
