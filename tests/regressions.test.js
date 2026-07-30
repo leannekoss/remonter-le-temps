@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 
 import { LAYERS, bboxAround, closeEpochs, loadAllEpochs, loadEpoch } from '../src/lib/ign.js'
+import { cancelThenRelease } from '../src/lib/lifecycle.js'
 import { MAX_WIDTH_M, geoAt, zoomAt } from '../src/lib/view.js'
 
 test('un zoom bloqué à la borne ne déplace pas le centre', () => {
@@ -35,6 +36,18 @@ test('closeEpochs ferme seulement les bitmaps qui ne sont plus affichés', () =>
 
   assert.equal(fermeA, 1)
   assert.equal(fermeB, 0)
+})
+
+test('la boucle de dessin est annulée avant la fermeture de ses bitmaps', () => {
+  const ordre = []
+
+  cancelThenRelease(
+    () => ordre.push('RAF annulé'),
+    () => ordre.push('bitmap fermé'),
+    [{ bitmap: {} }],
+  )
+
+  assert.deepEqual(ordre, ['RAF annulé', 'bitmap fermé'])
 })
 
 test('la sonde centrale est réutilisée dans la mosaïque', async () => {
