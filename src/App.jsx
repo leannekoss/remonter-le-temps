@@ -46,6 +46,7 @@ export default function App() {
   const runRef = useRef(0)
   const abortRef = useRef(null)
   const champRef = useRef(null)   // pour rendre le focus après un effacement
+  const [lien, setLien] = useState('')   // lien de partage, affiché après un clic
   const dataRef = useRef(null)
 
   const replaceData = useCallback((next) => {
@@ -59,6 +60,11 @@ export default function App() {
   const releaseEpochs = useCallback((epochs) => {
     closeEpochs(epochs, dataRef.current?.epochs)
   }, [])
+
+  // Le lien affiché fige une vue précise. Dès qu'on bouge ou qu'on zoome, il ne
+  // correspond plus à ce qu'on voit : on le retire plutôt que de laisser partager
+  // un cadrage qu'on a quitté.
+  useEffect(() => { setLien(''); setShared(false) }, [view])
 
   // La rotation du téléphone change le format de la vue, donc le tampon a retelecharger.
   useEffect(() => {
@@ -292,18 +298,27 @@ export default function App() {
 
   // Une seule action de partage : la feuille native du téléphone quand elle existe,
   // la copie du lien sinon.
+  // Le lien est TOUJOURS affiché après un clic, même quand la feuille de partage
+  // native s'ouvre. Auparavant on copiait en silence : on ne voyait pas ce qu'on
+  // partageait, et si l'écriture dans le presse-papiers échouait - permission refusée,
+  // navigateur récalcitrant - l'erreur n'était pas gérée et il ne se passait
+  // rigoureusement rien. Affiché, le lien reste sélectionnable à la main.
   const partager = async () => {
+    const url = window.location.href
+    setLien(url)
     const payload = {
       title: 'Remonter le temps',
       text: place?.label ? `${place.label}, vu du ciel depuis 1950` : 'Ce lieu, vu du ciel depuis 1950',
-      url: window.location.href,
+      url,
     }
     if (navigator.share) {
-      try { await navigator.share(payload); return } catch { /* annule */ }
+      try { await navigator.share(payload); return } catch { /* annulé : le lien reste affiché */ }
     }
-    await navigator.clipboard.writeText(window.location.href)
-    setShared(true)
-    setTimeout(() => setShared(false), 2000)
+    try {
+      await navigator.clipboard.writeText(url)
+      setShared(true)
+      setTimeout(() => setShared(false), 2000)
+    } catch { /* pas de presse-papiers : le lien affiché suffit, il est sélectionnable */ }
   }
 
   // pr-12 : la place du bouton d'effacement, pour que l'adresse ne passe pas dessous.
@@ -506,6 +521,21 @@ export default function App() {
             onViewChange={setView}
             onReleaseEpochs={releaseEpochs}
           />
+
+          {/* Affiché seulement après un clic : le lien est long, et il n'a rien à faire
+              là tant qu'on ne l'a pas demandé. `select-all` permet de le prendre d'un
+              seul geste si le presse-papiers n'a pas voulu. Il ne contient que des
+              coordonnées, jamais l'adresse tapée. */}
+          {lien && (
+            <p className="rounded-lg border border-[var(--color-filet)] bg-[var(--color-surface)] px-4 py-3 text-xs">
+              <span className="select-all break-all text-[var(--color-craie)]">{lien}</span>
+              <span className="mt-1 block text-[var(--color-attenue)]">
+                {shared
+                  ? 'Copié. Ce lien rouvre exactement cette vue.'
+                  : 'Ce lien rouvre exactement cette vue. Touchez-le pour le sélectionner.'}
+              </span>
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center gap-3">
             <button
