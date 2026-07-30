@@ -668,8 +668,10 @@ export default function App() {
           vous pouvez tirer une vidéo.
         </p>
         <p className="mt-2">
-          Ce site ne stocke rien, n'a pas de serveur et ne charge aucun script tiers : tout
-          le traitement se fait dans votre navigateur. Il interroge en revanche deux services
+          Ce site ne stocke rien et n'a pas de serveur : tout le traitement se fait dans
+          votre navigateur. Il compte les visites, sans cookie ni identifiant durable, et
+          les coordonnées du lieu que vous regardez sont retirées de cette mesure. Il
+          interroge en revanche deux services
           publics directement depuis votre appareil, qui reçoivent donc vos requêtes : la Base
           Adresse Nationale reçoit l'adresse que vous tapez, ou votre position si vous
           l'autorisez, et l'IGN reçoit les coordonnées de la vue affichée. Ce qu'ils en
